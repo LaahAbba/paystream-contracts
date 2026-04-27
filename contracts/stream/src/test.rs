@@ -902,3 +902,145 @@ fn test_accept_employer_transfer_wrong_address_rejected() {
     client.propose_employer_transfer(&employer, &id, &new_employer);
     client.accept_employer_transfer(&attacker, &id);
 }
+
+// ---------------------------------------------------------------------------
+// Issue: Maximum Stream Duration Validation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_create_stream_max_duration_ok() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let max_duration = crate::validate::MAX_STREAM_DURATION;
+    let now = env.ledger().timestamp();
+    
+    // Duration exactly MAX_STREAM_DURATION via stop_time
+    let id = client.create_stream(&employer, &employee, &token_id, &(max_duration as i128), &1, &(now + max_duration), &0);
+    assert_eq!(id, 1);
+}
+
+#[test]
+#[should_panic(expected = "E014")]
+fn test_create_stream_exceeds_max_duration_stop_time_rejected() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let max_duration = crate::validate::MAX_STREAM_DURATION;
+    let now = env.ledger().timestamp();
+    
+    // Duration MAX_STREAM_DURATION + 1 via stop_time
+    client.create_stream(&employer, &employee, &token_id, &((max_duration + 1) as i128), &1, &(now + max_duration + 1), &0);
+}
+
+#[test]
+#[should_panic(expected = "E014")]
+fn test_create_stream_exceeds_max_duration_effective_rejected() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let max_duration = crate::validate::MAX_STREAM_DURATION;
+    
+    // Duration MAX_STREAM_DURATION + 1 via deposit/rate (effective duration)
+    // Rate = 1, Deposit = max_duration + 1
+    client.create_stream(&employer, &employee, &token_id, &((max_duration + 1) as i128), &1, &0, &0);
+}
+
+#[test]
+fn test_cancel_after_partial_withdraw() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+    let token = paystream_token::TokenContractClient::new(&env, &token_id);
+
+    client.initialize(&admin);
+    let employer_initial_balance = token.balance(&employer);
+    let employee_initial_balance = token.balance(&employee);
+
+    // Create stream: 10,000 tokens, 10 tokens/sec
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0);
+    
+    // 1. Advance 30s and withdraw (30 * 10 = 300 tokens)
+    env.ledger().with_mut(|l| l.timestamp += 30);
+    client.withdraw(&employee, &id);
+    assert_eq!(token.balance(&employee), employee_initial_balance + 300);
+    assert_eq!(client.get_stream(&id).withdrawn, 300);
+
+    // 2. Advance another 20s (20 * 10 = 200 tokens earned but not withdrawn)
+    env.ledger().with_mut(|l| l.timestamp += 20);
+    
+    // 3. Cancel stream
+    // Should: 
+    // - pay 200 to employee
+    // - refund 9,500 to employer (10,000 - 300 - 200 = 9,500)
+    client.cancel_stream(&employer, &id);
+
+    assert_eq!(token.balance(&employee), employee_initial_balance + 500);
+    assert_eq!(token.balance(&employer), employer_initial_balance - 500); // 10,000 total out, but 9,500 refunded
+    
+    let s = client.get_stream(&id);
+    assert_eq!(s.status, StreamStatus::Cancelled);
+    assert_eq!(s.withdrawn, 500);
+    assert_eq!(s.withdrawn + (token.balance(&employer) - (employer_initial_balance - 10_000)), 10_000); // Total accounted for
+}
+
+#[test]
+#[should_panic(expected = "E015")]
+fn test_create_stream_exceeds_max_limit_rejected() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    // Set limit to 1
+    client.set_max_streams_per_employer(&admin, &0, &1);
+    
+    // First stream ok
+    client.create_stream(&employer, &employee, &token_id, &1000, &1, &0, &0);
+    
+    // Second stream should fail
+    client.create_stream(&employer, &employee, &token_id, &1000, &1, &0, &0);
+}
+
+#[test]
+fn test_admin_can_adjust_max_limit() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    // Set limit to 1
+    client.set_max_streams_per_employer(&admin, &0, &1);
+    assert_eq!(client.max_streams_per_employer(), 1);
+
+    // Create 1 stream
+    client.create_stream(&employer, &employee, &token_id, &1000, &1, &0, &0);
+    
+    // Increase limit to 2
+    client.set_max_streams_per_employer(&admin, &1, &2);
+    assert_eq!(client.max_streams_per_employer(), 2);
+
+    // Now second stream ok
+    client.create_stream(&employer, &employee, &token_id, &1000, &1, &0, &0);
+}
+
+
+
