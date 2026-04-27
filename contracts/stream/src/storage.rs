@@ -187,3 +187,12 @@ pub fn get_pending_employer(env: &Env, stream_id: u64) -> Option<Address> {
 pub fn clear_pending_employer(env: &Env, stream_id: u64) {
     env.storage().instance().remove(&DataKey::PendingEmployer(stream_id));
 }
+
+pub fn get_max_streams_per_employer(env: &Env) -> u32 {
+    env.storage().instance().get(&DataKey::MaxStreamsPerEmployer).unwrap_or(100)
+}
+
+pub fn set_max_streams_per_employer(env: &Env, limit: u32) {
+    env.storage().instance().set(&DataKey::MaxStreamsPerEmployer, &limit);
+}
+

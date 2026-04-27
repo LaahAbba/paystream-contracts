@@ -17,13 +17,14 @@ use storage::{
     get_min_deposit, get_pending_admin, get_pending_employer, index_employee_stream,
     index_employer_stream, load_stream, next_id, save_stream, set_admin, set_fee_bps,
     set_fee_recipient, set_min_deposit, set_pending_admin, set_pending_employer,
+    get_max_streams_per_employer, set_max_streams_per_employer,
 };
 use types::{
     DataKey, Stream, StreamParams, StreamStatus, ERR_FEE_TOO_HIGH, ERR_INVALID_TOKEN, ERR_OVERFLOW,
     ERR_REENTRANT, ERR_STREAM_CANCELLED, ERR_STREAM_EXHAUSTED, ERR_UNAUTHORIZED_TRANSFER,
     ERR_WITHDRAW_COOLDOWN, ERR_ZERO_DEPOSIT,
 };
-use validate::{validate_create_stream, validate_top_up};
+use validate::{validate_create_stream, validate_top_up, validate_max_streams};
 
 fn get_paused(env: &Env) -> bool {
     env.storage()
@@ -171,6 +172,24 @@ impl StreamContract {
         set_fee_recipient(&env, &fee_recipient);
     }
 
+    /// Admin configures the maximum number of streams an employer can create.
+    ///
+    /// # Parameters
+    /// - `admin` — must match the stored admin (requires auth)
+    /// - `nonce` — current admin nonce (replay protection)
+    /// - `limit` — new maximum streams limit
+    ///
+    /// # Errors
+    /// - Panics if `admin` auth fails or does not match stored admin
+    /// - E009 if `nonce` is wrong
+    pub fn set_max_streams_per_employer(env: Env, admin: Address, nonce: u64, limit: u32) {
+        admin.require_auth();
+        let stored_admin = get_admin(&env);
+        assert_eq!(admin, stored_admin, "not the admin");
+        consume_admin_nonce(&env, nonce);
+        set_max_streams_per_employer(&env, limit);
+    }
+
     /// Employer creates a salary stream and deposits funds into the contract escrow.
     ///
     /// Tokens are transferred from `employer` to the contract immediately.
@@ -209,6 +228,10 @@ impl StreamContract {
     ) -> u64 {
         employer.require_auth();
         assert!(!get_paused(&env), "contract is paused");
+
+        let current_count = get_employer_streams(&env, &employer).len();
+        let max_limit = get_max_streams_per_employer(&env);
+        validate_max_streams(current_count, max_limit);
 
         let now = env.ledger().timestamp();
         let min_deposit = get_min_deposit(&env);
@@ -270,6 +293,10 @@ impl StreamContract {
         let now = env.ledger().timestamp();
         let min_deposit = get_min_deposit(&env);
         let mut ids: Vec<u64> = Vec::new(&env);
+
+        let current_count = get_employer_streams(&env, &employer).len();
+        let max_limit = get_max_streams_per_employer(&env);
+        assert!(current_count + params.len() <= max_limit, "{}", types::ERR_MAX_STREAMS_REACHED);
 
         for p in params.iter() {
             validate_create_stream(p.deposit, min_deposit, p.rate_per_second, p.stop_time, now, &employer, &p.employee);
@@ -676,6 +703,11 @@ impl StreamContract {
     /// Current nonce as `u64`.
     pub fn admin_nonce(env: Env) -> u64 {
         get_admin_nonce(&env)
+    }
+
+    /// Return the maximum number of streams an employer can create.
+    pub fn max_streams_per_employer(env: Env) -> u32 {
+        get_max_streams_per_employer(&env)
     }
 
     /// Return all stream IDs owned by `employer`.
