@@ -10,6 +10,9 @@ mod validate;
 #[cfg(test)]
 mod test;
 
+#[cfg(test)]
+mod auth_tests;
+
 use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, Vec};
 use storage::{
     apply_proposal, claimable_amount, clear_pending_admin, clear_pending_employer,
