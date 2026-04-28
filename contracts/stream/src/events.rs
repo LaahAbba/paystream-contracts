@@ -15,6 +15,17 @@ pub fn stream_status_changed(env: &Env, id: u64, status: &StreamStatus) {
     env.events().publish((symbol_short!("status"), id), status.clone());
 }
 
+/// Emitted when a stream is paused by the employer.
+/// Includes employee address for notification purposes.
+pub fn stream_paused(env: &Env, id: u64, employer: &Address, employee: &Address, paused_at: u64) {
+    env.events().publish((symbol_short!("paused"), id), (employer.clone(), employee.clone(), paused_at));
+}
+
+/// Emitted when a stream is resumed by the employer.
+pub fn stream_resumed(env: &Env, id: u64, employer: &Address, employee: &Address, resumed_at: u64) {
+    env.events().publish((symbol_short!("resumed"), id), (employer.clone(), employee.clone(), resumed_at));
+}
+
 pub fn topped_up(env: &Env, id: u64, employer: &Address, amount: i128) {
     env.events().publish((symbol_short!("topup"), id), (employer.clone(), amount));
 }

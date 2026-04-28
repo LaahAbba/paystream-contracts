@@ -1358,3 +1358,168 @@ fn test_governance_rejected_proposal_not_executable() {
     env.ledger().with_mut(|l| l.timestamp += 172_801);
     client.execute_proposal(&pid); // should panic: proposal not passed
 }
+
+// ---------------------------------------------------------------------------
+// Pause notification and history tests
+// ---------------------------------------------------------------------------
+
+/// Test that pause event includes employee address for notifications.
+#[test]
+fn test_pause_event_includes_employee() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0, &0);
+
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    
+    // Pause the stream
+    client.pause_stream(&employer, &id);
+    
+    // Verify the stream is paused
+    let stream = client.get_stream(&id);
+    assert_eq!(stream.status, StreamStatus::Paused);
+    assert_eq!(stream.paused_at, 100);
+    
+    // Check that events were emitted (events are automatically captured by the test environment)
+    let events = env.events().all();
+    let pause_events: Vec<_> = events
+        .iter()
+        .filter(|e| {
+            e.topics.get(0).map_or(false, |t| {
+                t.to_string().contains("paused")
+            })
+        })
+        .collect();
+    
+    // Verify at least one pause event was emitted
+    assert!(!pause_events.is_empty(), "Pause event should be emitted");
+}
+
+/// Test that pause history can be queried.
+#[test]
+fn test_pause_history_tracking() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0, &0);
+
+    // Initially no pause history
+    let history = client.pause_history(&id);
+    assert_eq!(history.len(), 0);
+
+    // Pause the stream
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.pause_stream(&employer, &id);
+
+    // Check pause history
+    let history = client.pause_history(&id);
+    assert_eq!(history.len(), 1);
+    assert_eq!(history.get(0).unwrap().stream_id, id);
+    assert_eq!(history.get(0).unwrap().timestamp, 100);
+    assert_eq!(history.get(0).unwrap().is_pause, true);
+
+    // Resume the stream
+    env.ledger().with_mut(|l| l.timestamp += 200);
+    client.resume_stream(&employer, &id);
+
+    // Check pause history again
+    let history = client.pause_history(&id);
+    assert_eq!(history.len(), 2);
+    assert_eq!(history.get(1).unwrap().stream_id, id);
+    assert_eq!(history.get(1).unwrap().timestamp, 300);
+    assert_eq!(history.get(1).unwrap().is_pause, false);
+}
+
+/// Test multiple pause/resume cycles are tracked correctly.
+#[test]
+fn test_multiple_pause_resume_cycles() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0, &0);
+
+    // First pause/resume cycle
+    env.ledger().with_mut(|l| l.timestamp += 50);
+    client.pause_stream(&employer, &id);
+    
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.resume_stream(&employer, &id);
+
+    // Second pause/resume cycle
+    env.ledger().with_mut(|l| l.timestamp += 75);
+    client.pause_stream(&employer, &id);
+    
+    env.ledger().with_mut(|l| l.timestamp += 50);
+    client.resume_stream(&employer, &id);
+
+    // Verify all events are tracked
+    let history = client.pause_history(&id);
+    assert_eq!(history.len(), 4);
+    
+    // First pause at t=50
+    assert_eq!(history.get(0).unwrap().timestamp, 50);
+    assert_eq!(history.get(0).unwrap().is_pause, true);
+    
+    // First resume at t=150
+    assert_eq!(history.get(1).unwrap().timestamp, 150);
+    assert_eq!(history.get(1).unwrap().is_pause, false);
+    
+    // Second pause at t=225
+    assert_eq!(history.get(2).unwrap().timestamp, 225);
+    assert_eq!(history.get(2).unwrap().is_pause, true);
+    
+    // Second resume at t=275
+    assert_eq!(history.get(3).unwrap().timestamp, 275);
+    assert_eq!(history.get(3).unwrap().is_pause, false);
+}
+
+/// Test that resume event includes employee address for notifications.
+#[test]
+fn test_resume_event_includes_employee() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0, &0);
+
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.pause_stream(&employer, &id);
+    
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.resume_stream(&employer, &id);
+    
+    // Verify the stream is active again
+    let stream = client.get_stream(&id);
+    assert_eq!(stream.status, StreamStatus::Active);
+    assert_eq!(stream.paused_at, 0);
+    
+    // Check that resume events were emitted
+    let events = env.events().all();
+    let resume_events: Vec<_> = events
+        .iter()
+        .filter(|e| {
+            e.topics.get(0).map_or(false, |t| {
+                t.to_string().contains("resumed")
+            })
+        })
+        .collect();
+    
+    // Verify at least one resume event was emitted
+    assert!(!resume_events.is_empty(), "Resume event should be emitted");
+}

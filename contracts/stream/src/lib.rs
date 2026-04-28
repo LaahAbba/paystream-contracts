@@ -15,17 +15,17 @@ mod auth_tests;
 
 use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, Vec};
 use storage::{
-    apply_proposal, claimable_amount, clear_pending_admin, clear_pending_employer,
+    add_pause_event, apply_proposal, claimable_amount, clear_pending_admin, clear_pending_employer,
     consume_admin_nonce, get_admin, get_admin_nonce, get_employee_streams, get_employer_streams,
     get_fee_bps, get_fee_recipient, get_max_streams_per_employer, get_min_deposit,
-    get_pending_admin, get_pending_employer, has_voted, index_employee_stream,
+    get_pause_history, get_pending_admin, get_pending_employer, has_voted, index_employee_stream,
     index_employer_stream, load_proposal, load_stream, mark_voted, next_id, next_proposal_id,
     save_proposal, save_stream, set_admin, set_fee_bps, set_fee_recipient,
     set_max_streams_per_employer, set_min_deposit, set_pending_admin, set_pending_employer,
     tally_proposal,
 };
 use types::{
-    DataKey, GovParam, Proposal, ProposalStatus, Stream, StreamParams, StreamStatus,
+    DataKey, GovParam, PauseEvent, Proposal, ProposalStatus, Stream, StreamParams, StreamStatus,
     ERR_FEE_TOO_HIGH, ERR_INVALID_TOKEN, ERR_OVERFLOW, ERR_REENTRANT, ERR_STREAM_CANCELLED,
     ERR_STREAM_EXHAUSTED, ERR_UNAUTHORIZED_TRANSFER, ERR_WITHDRAW_COOLDOWN, ERR_ZERO_DEPOSIT,
     ERR_ZERO_RATE,
@@ -303,10 +303,12 @@ impl StreamContract {
         let mut stream = load_stream(&env, stream_id).expect("stream not found");
         assert_eq!(stream.employer, employer, "not the employer");
         assert_eq!(stream.status, StreamStatus::Active, "stream not active");
-        stream.paused_at = env.ledger().timestamp();
+        let now = env.ledger().timestamp();
+        stream.paused_at = now;
         stream.status = StreamStatus::Paused;
         save_stream(&env, &stream);
-        events::stream_status_changed(&env, stream_id, &StreamStatus::Paused);
+        add_pause_event(&env, stream_id, now, true);
+        events::stream_paused(&env, stream_id, &employer, &stream.employee, now);
     }
 
     pub fn resume_stream(env: Env, employer: Address, stream_id: u64) {
@@ -322,7 +324,8 @@ impl StreamContract {
         stream.paused_at = 0;
         stream.status = StreamStatus::Active;
         save_stream(&env, &stream);
-        events::stream_status_changed(&env, stream_id, &StreamStatus::Active);
+        add_pause_event(&env, stream_id, now, false);
+        events::stream_resumed(&env, stream_id, &employer, &stream.employee, now);
     }
 
     pub fn cancel_stream(env: Env, employer: Address, stream_id: u64) {
@@ -441,6 +444,10 @@ impl StreamContract {
 
     pub fn streams_by_employee(env: Env, employee: Address) -> Vec<u64> {
         get_employee_streams(&env, &employee)
+    }
+
+    pub fn pause_history(env: Env, stream_id: u64) -> Vec<PauseEvent> {
+        get_pause_history(&env, stream_id)
     }
 
     // ---------------------------------------------------------------------------

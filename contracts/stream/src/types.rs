@@ -35,6 +35,15 @@ pub struct Stream {
     pub paused_at: u64,
 }
 
+/// Record of a pause/resume event for history tracking.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct PauseEvent {
+    pub stream_id: u64,
+    pub timestamp: u64,
+    pub is_pause: bool, // true for pause, false for resume
+}
+
 /// Parameters for a single stream in a batch create call.
 #[contracttype]
 #[derive(Clone, Debug)]
@@ -103,6 +112,8 @@ pub enum DataKey {
     PendingEmployer(u64),
     /// Maximum number of streams an employer can create.
     MaxStreamsPerEmployer,
+    /// Pause history for a stream.
+    PauseHistory(u64),
     // Governance (#124)
     Proposal(u64),
     ProposalCount,

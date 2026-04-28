@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use soroban_sdk::{Env, Address, Vec};
-use crate::types::{DataKey, Proposal, ProposalStatus, Stream, StreamStatus, ERR_OVERFLOW, ERR_BAD_NONCE};
+use crate::types::{DataKey, PauseEvent, Proposal, ProposalStatus, Stream, StreamStatus, ERR_OVERFLOW, ERR_BAD_NONCE};
 
 pub const DEFAULT_MIN_DEPOSIT: i128 = 10_000;
 
@@ -213,4 +213,25 @@ pub fn tally_proposal(env: &Env, mut proposal: Proposal) -> Proposal {
     }
     save_proposal(env, &proposal);
     proposal
+}
+
+// ---------------------------------------------------------------------------
+// Pause history helpers
+// ---------------------------------------------------------------------------
+
+pub fn add_pause_event(env: &Env, stream_id: u64, timestamp: u64, is_pause: bool) {
+    let key = DataKey::PauseHistory(stream_id);
+    let mut history: Vec<PauseEvent> = env.storage().persistent().get(&key).unwrap_or_else(|| Vec::new(env));
+    history.push_back(PauseEvent {
+        stream_id,
+        timestamp,
+        is_pause,
+    });
+    env.storage().persistent().set(&key, &history);
+    env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+}
+
+pub fn get_pause_history(env: &Env, stream_id: u64) -> Vec<PauseEvent> {
+    let key = DataKey::PauseHistory(stream_id);
+    env.storage().persistent().get(&key).unwrap_or_else(|| Vec::new(env))
 }
