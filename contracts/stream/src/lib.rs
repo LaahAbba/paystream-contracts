@@ -14,6 +14,9 @@ mod test;
 #[cfg(test)]
 mod auth_tests;
 
+#[cfg(test)]
+mod prop_tests;
+
 use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, Vec};
 use access_control::{
     require_admin, require_employee, require_employee_by_id, require_employer,
