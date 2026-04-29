@@ -4,6 +4,7 @@ import { usePayStream } from "./usePayStream";
 import { useTransactionHistory } from "./useTransactionHistory";
 import { CONFIG } from "./config";
 import { useStreamTemplates, DEFAULT_TEMPLATES, StreamTemplate } from "./useStreamTemplates";
+import { exportAllHistory } from "./csvExport";
 
 const STROOP = 10_000_000n; // 1 XLM in stroops
 
@@ -154,6 +155,33 @@ export default function App() {
     setHistoryStreamId(streamId);
     history.reset();
     history.fetchHistory(streamId);
+  };
+
+  const handleExportCsv = async (streamId: bigint) => {
+    await exportAllHistory(streamId, async (cursor) => {
+      // Re-use the Horizon fetch logic from useTransactionHistory by calling
+      // the hook's fetchHistory and reading the internal cursor. Since the hook
+      // manages its own state we replicate the fetch inline here for a clean
+      // one-shot export without mutating the panel's displayed records.
+      const PAGE_SIZE = 200; // larger page for export efficiency
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), order: "desc" });
+      if (cursor) params.set("cursor", cursor);
+      const HORIZON_BASE = "https://horizon-testnet.stellar.org";
+      const res = await fetch(`${HORIZON_BASE}/accounts/${streamId}/operations?${params}`);
+      if (!res.ok) throw new Error(`Horizon error: ${res.status}`);
+      const data = await res.json() as {
+        _embedded: { records: Array<Record<string, unknown>> };
+      };
+      const ops = data._embedded.records;
+      const records = ops.map((op) => ({
+        id: String(op.id),
+        timestamp: String(op.created_at ?? ""),
+        type: String(op.type ?? "").replace(/_/g, " "),
+        amount: typeof op.amount === "string" ? `${op.amount} XLM` : null,
+      }));
+      const lastToken = ops.length > 0 ? String(ops[ops.length - 1].paging_token ?? "") : null;
+      return { records, nextCursor: ops.length === PAGE_SIZE ? lastToken : null };
+    });
   };
 
   // Re-validate on change after first submit attempt
@@ -374,6 +402,13 @@ export default function App() {
                       >
                         History
                       </button>
+                      <button
+                        onClick={() => handleExportCsv(s.id)}
+                        className="btn btn-secondary"
+                        aria-label={`Export CSV for stream ${key}`}
+                      >
+                        Export CSV
+                      </button>
                     </div>
 
                     {/* ── Transaction History ── */}
@@ -414,6 +449,16 @@ export default function App() {
                             aria-label="Load more transactions"
                           >
                             Load more
+                          </button>
+                        )}
+                        {history.records.length > 0 && (
+                          <button
+                            onClick={() => handleExportCsv(s.id)}
+                            className="btn btn-secondary"
+                            style={{ marginTop: 8 }}
+                            aria-label={`Export all history for stream ${key} as CSV`}
+                          >
+                            Export all as CSV
                           </button>
                         )}
                       </div>
