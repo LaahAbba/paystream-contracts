@@ -3,6 +3,7 @@ import React, { useState, useEffect, useId } from "react";
 import { usePayStream } from "./usePayStream";
 import { useTransactionHistory } from "./useTransactionHistory";
 import { CONFIG } from "./config";
+import { useStreamTemplates, DEFAULT_TEMPLATES, StreamTemplate } from "./useStreamTemplates";
 
 const STROOP = 10_000_000n; // 1 XLM in stroops
 
@@ -105,6 +106,26 @@ export default function App() {
   // Transaction history panel
   const [historyStreamId, setHistoryStreamId] = useState<bigint | null>(null);
 
+  // Stream templates (#117)
+  const { templates, save: saveTemplate, remove: removeTemplate } = useStreamTemplates();
+  const [templateName, setTemplateName] = useState("");
+
+  const applyTemplate = (tpl: StreamTemplate) => {
+    setEmployee("");
+    setToken(tpl.token);
+    setDeposit(tpl.deposit);
+    setRate(tpl.rate);
+    setStopTime(tpl.stopTime);
+    setSubmitted(false);
+    setFormErrors({});
+  };
+
+  const handleSaveTemplate = () => {
+    if (!templateName.trim()) return;
+    saveTemplate({ name: templateName.trim(), token, deposit, rate, stopTime });
+    setTemplateName("");
+  };
+
   const duration = estimatedDuration(deposit, rate);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -182,6 +203,48 @@ export default function App() {
             ⚠️ {error}
           </div>
         )}
+
+        {/* ── Stream Templates (#117) ── */}
+        <section className="card" aria-labelledby="templates-heading">
+          <h2 id="templates-heading">Stream Templates</h2>
+          {templates.length === 0 && (
+            <p className="muted">No saved templates. Fill the form below and save it as a template for quick reuse.</p>
+          )}
+          {templates.length > 0 && (
+            <ul className="stream-list" role="list">
+              {templates.map((tpl) => (
+                <li key={tpl.id} className="stream-item" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span><strong>{tpl.name}</strong> — {tpl.deposit} deposit · {tpl.rate} stroops/s</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn btn-secondary" onClick={() => applyTemplate(tpl)} aria-label={`Apply template ${tpl.name}`}>
+                      Apply
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => removeTemplate(tpl.id)} aria-label={`Delete template ${tpl.name}`}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ cursor: "pointer" }}>Save current form as template</summary>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <label htmlFor="template-name" className="sr-only">Template name</label>
+              <input
+                id="template-name"
+                className="input"
+                placeholder="Template name"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                aria-label="Template name"
+              />
+              <button className="btn" onClick={handleSaveTemplate} disabled={!templateName.trim()}>
+                Save
+              </button>
+            </div>
+          </details>
+        </section>
 
         {/* ── Create Stream ── */}
         <section className="card" aria-labelledby="create-heading">
