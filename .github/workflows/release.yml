@@ -13,6 +13,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -40,10 +42,33 @@ jobs:
           sha256sum *.wasm > checksums.sha256
           cat checksums.sha256
 
+      - name: Generate CHANGELOG with git-cliff
+        uses: orhun/git-cliff-action@v3
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: RELEASE_NOTES.md
           files: |
             target/wasm32-unknown-unknown/release/*.wasm
             target/wasm32-unknown-unknown/release/checksums.sha256
-          generate_release_notes: true
+
+  commitlint:
+    name: Lint Commit Messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --save-dev @commitlint/cli@19 @commitlint/config-conventional@19
+      - run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
