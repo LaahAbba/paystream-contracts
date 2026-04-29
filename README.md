@@ -200,6 +200,43 @@ make deploy-local
 
 ---
 
+## Using USDC as the Payment Token
+
+PayStream is token-agnostic — any [SEP-41](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0041.md) compliant token works. The recommended default is **Stellar USDC** issued by Circle.
+
+### USDC Contract Addresses
+
+| Network | Contract Address |
+|---|---|
+| Testnet | `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5` |
+| Mainnet | `GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` |
+
+Source: [Circle — Stellar USDC](https://developers.circle.com/stablecoins/stellar-usdc)
+
+### Creating a USDC Stream (JavaScript)
+
+```js
+import { CONFIG, USDC } from "./config";
+
+// 1 USDC = 10_000_000 stroops (7 decimal places on Stellar)
+const ONE_USDC = 10_000_000n;
+
+await contract.create_stream({
+  employer:        myPublicKey,
+  employee:        employeePublicKey,
+  token_address:   USDC.testnet,          // swap for USDC.mainnet in prod
+  deposit:         ONE_USDC * 3600n,      // 3600 USDC
+  rate_per_second: ONE_USDC,              // 1 USDC / second
+  stop_time:       0n,                    // no hard stop
+  cooldown_period: 0n,
+  cliff_time:      0n,
+});
+```
+
+The demo UI pre-fills the token field with the testnet USDC address automatically via `CONFIG.defaultToken`.
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

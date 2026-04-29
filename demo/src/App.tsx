@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useId } from "react";
 import { usePayStream } from "./usePayStream";
 import { useTransactionHistory } from "./useTransactionHistory";
+import { CONFIG } from "./config";
 
 const STROOP = 10_000_000n; // 1 XLM in stroops
 
@@ -91,7 +92,7 @@ export default function App() {
 
   // Create stream form state
   const [employee, setEmployee] = useState("");
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(CONFIG.defaultToken);
   const [deposit, setDeposit] = useState("10");
   const [rate, setRate] = useState("1");
   const [stopTime, setStopTime] = useState("0");

@@ -1523,3 +1523,54 @@ fn test_resume_event_includes_employee() {
     // Verify at least one resume event was emitted
     assert!(!resume_events.is_empty(), "Resume event should be emitted");
 }
+
+// ---------------------------------------------------------------------------
+// Issue #119 – USDC as default payment token
+// ---------------------------------------------------------------------------
+
+/// Integration test: create and withdraw a stream using a USDC-like SEP-41
+/// token. The test uses the project's own token contract as a stand-in for
+/// Circle USDC because the real USDC contract is only available on-network.
+/// The token contract is fully SEP-41 compliant, so the behaviour is
+/// identical to production USDC.
+///
+/// Testnet USDC:  GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+/// Mainnet USDC:  GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+#[test]
+fn test_create_and_withdraw_with_usdc_token() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+
+    // Deploy a SEP-41 token that represents USDC (6 decimals in production;
+    // here we use the project token which has 7 decimals — the contract logic
+    // is token-agnostic so the test is still valid).
+    let usdc_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &1_000_000); // 1 USDC (6 dec) minimum
+
+    // Create a stream paying 1 USDC per second for 3600 seconds (1 hour).
+    let deposit: i128 = 3_600_000_000; // 3600 USDC
+    let rate: i128 = 1_000_000;        // 1 USDC/s
+    let id = client.create_stream(&employer, &employee, &usdc_id, &deposit, &rate, &0, &0, &0);
+
+    assert_eq!(id, 1);
+    let s = client.get_stream(&id);
+    assert_eq!(s.token, usdc_id);
+    assert_eq!(s.deposit, deposit);
+    assert_eq!(s.rate_per_second, rate);
+
+    // Advance 60 seconds → 60 USDC claimable.
+    env.ledger().with_mut(|l| l.timestamp += 60);
+    assert_eq!(client.claimable(&id), 60_000_000);
+
+    // Employee withdraws.
+    let withdrawn = client.withdraw(&employee, &id);
+    assert_eq!(withdrawn, 60_000_000);
+
+    let s = client.get_stream(&id);
+    assert_eq!(s.withdrawn, 60_000_000);
+    assert_eq!(s.status, StreamStatus::Active);
+}
