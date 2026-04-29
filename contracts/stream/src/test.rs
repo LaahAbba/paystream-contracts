@@ -51,6 +51,31 @@ fn test_create_stream() {
     assert!(!s.locked);
 }
 
+/// Issue #65: create_stream transfers exactly `deposit` tokens — no more, no less.
+/// Verifies the exact-deposit approval model: employer balance decreases by exactly
+/// `deposit` and the contract balance increases by exactly `deposit`.
+#[test]
+fn test_create_stream_transfers_exact_deposit() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+    let token = paystream_token::TokenContractClient::new(&env, &token_id);
+
+    let deposit: i128 = 5_000;
+    let employer_balance_before = token.balance(&employer);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+    client.create_stream(&employer, &employee, &token_id, &deposit, &1, &0, &0, &0);
+
+    // Employer lost exactly `deposit` tokens.
+    assert_eq!(token.balance(&employer), employer_balance_before - deposit);
+    // Contract holds exactly `deposit` tokens.
+    assert_eq!(token.balance(&env.current_contract_address()), deposit);
+}
+
 #[test]
 fn test_claimable_increases_with_time() {
     let (env, client) = setup();

@@ -132,6 +132,15 @@ impl StreamContract {
     /// Create a salary stream with an optional cliff period (#123).
     ///
     /// `cliff_time` — ledger timestamp before which nothing is claimable (0 = no cliff).
+    ///
+    /// # Token approval / transfer security (#65)
+    ///
+    /// This function calls `token::transfer(employer → contract, deposit)` — it transfers
+    /// **exactly** the `deposit` amount and nothing more.  No `approve` call is made by
+    /// the contract; the caller must have pre-approved at least `deposit` tokens to this
+    /// contract address before invoking `create_stream`.  This design prevents
+    /// over-approval: the contract can never pull more than the caller explicitly
+    /// authorised for this single transaction.
     pub fn create_stream(
         env: Env,
         employer: Address,
