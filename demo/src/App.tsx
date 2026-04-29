@@ -5,6 +5,9 @@ import { useTransactionHistory } from "./useTransactionHistory";
 import { CONFIG } from "./config";
 import { useStreamTemplates, DEFAULT_TEMPLATES, StreamTemplate } from "./useStreamTemplates";
 import { exportAllHistory } from "./csvExport";
+import { EmployerDashboard } from "./EmployerDashboard";
+import { EmployeeDashboard } from "./EmployeeDashboard";
+import { StreamStatusCard } from "./StreamStatusCard";
 
 const STROOP = 10_000_000n; // 1 XLM in stroops
 
@@ -86,8 +89,11 @@ function estimatedDuration(deposit: string, rate: string): string | null {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
+type AppView = "demo" | "dashboard" | "employee";
+
 export default function App() {
   const [dark, toggleDark] = useDarkMode();
+  const [view, setView] = useState<AppView>("demo");
   const { publicKey, streams, claimableAmounts, error, loading, connect, loadStream, createStream, withdraw } =
     usePayStream();
   const history = useTransactionHistory();
@@ -207,7 +213,67 @@ export default function App() {
         </div>
       </header>
 
-      <main id="main-content">
+      {/* ── View tabs ── */}
+      <nav className="view-tabs" role="tablist" aria-label="Application views">
+        <button
+          role="tab"
+          id="tab-demo"
+          aria-selected={view === "demo"}
+          aria-controls="panel-demo"
+          className={`tab-btn${view === "demo" ? " tab-active" : ""}`}
+          onClick={() => setView("demo")}
+        >
+          🖥 Stream Demo
+        </button>
+        <button
+          role="tab"
+          id="tab-dashboard"
+          aria-selected={view === "dashboard"}
+          aria-controls="panel-dashboard"
+          className={`tab-btn${view === "dashboard" ? " tab-active" : ""}`}
+          onClick={() => setView("dashboard")}
+        >
+          💼 Employer Dashboard
+        </button>
+        <button
+          role="tab"
+          id="tab-employee"
+          aria-selected={view === "employee"}
+          aria-controls="panel-employee"
+          className={`tab-btn${view === "employee" ? " tab-active" : ""}`}
+          onClick={() => setView("employee")}
+        >
+          💳 Employee Earnings
+        </button>
+      </nav>
+
+      {/* ── Employer Dashboard panel ── */}
+      <div
+        role="tabpanel"
+        id="panel-dashboard"
+        aria-labelledby="tab-dashboard"
+        hidden={view !== "dashboard"}
+      >
+        <EmployerDashboard walletPublicKey={publicKey} />
+      </div>
+
+      {/* ── Employee Earnings panel ── */}
+      <div
+        role="tabpanel"
+        id="panel-employee"
+        aria-labelledby="tab-employee"
+        hidden={view !== "employee"}
+      >
+        <EmployeeDashboard walletPublicKey={publicKey} />
+      </div>
+
+      {/* ── Demo panel ── */}
+      <main
+        id="panel-demo"
+        role="tabpanel"
+        aria-labelledby="tab-demo"
+        hidden={view !== "demo"}
+      >
         {/* ── Wallet ── */}
         <section className="card" aria-labelledby="wallet-heading">
           <h2 id="wallet-heading">Wallet</h2>
@@ -367,102 +433,77 @@ export default function App() {
                 const key = s.id.toString();
                 const claimable = claimableAmounts[key] ?? 0n;
                 return (
-                  <li key={key} className="stream-item" aria-label={`Stream ${key}`}>
-                    <p>
-                      <strong>Stream #{key}</strong> — <StatusBadge status={s.status} />
-                    </p>
-                    <p>Employee: <code>{s.employee}</code></p>
-                    <p>Rate: <span aria-label={`${s.ratePerSecond.toString()} stroops per second`}>{s.ratePerSecond.toString()} stroops/sec</span></p>
-                    <p>
-                      Deposit: {formatXlm(s.deposit)} XLM &nbsp;|&nbsp; Withdrawn: {formatXlm(s.withdrawn)} XLM
-                    </p>
-                    <p>
-                      🔴 Claimable now:{" "}
-                      <strong aria-live="polite">{formatXlm(claimable)} XLM</strong>{" "}
-                      <span className="muted">(live)</span>
-                    </p>
-                    <div className="stream-actions">
-                      {s.status === "Active" && publicKey === s.employee && (
-                        <button
-                          onClick={() => withdraw(s.id)}
-                          disabled={loading}
-                          className="btn"
-                          aria-label={`Withdraw from stream ${key}`}
-                          aria-busy={loading}
+                  <li key={key} className="stream-item">
+                    <StreamStatusCard
+                      stream={s}
+                      claimable={claimable}
+                      onWithdraw={
+                        s.status === "Active" && publicKey === s.employee
+                          ? () => withdraw(s.id)
+                          : undefined
+                      }
+                      onShowHistory={() => handleShowHistory(s.id)}
+                      onExportCsv={() => handleExportCsv(s.id)}
+                      loading={loading}
+                    >
+                      {/* Inline history panel */}
+                      {historyStreamId === s.id && (
+                        <div
+                          id={`history-${key}`}
+                          className="history-panel"
+                          role="region"
+                          aria-label={`Transaction history for stream ${key}`}
                         >
-                          Withdraw
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleShowHistory(s.id)}
-                        className="btn btn-secondary"
-                        aria-label={`View transaction history for stream ${key}`}
-                        aria-expanded={historyStreamId === s.id}
-                        aria-controls={`history-${key}`}
-                      >
-                        History
-                      </button>
-                      <button
-                        onClick={() => handleExportCsv(s.id)}
-                        className="btn btn-secondary"
-                        aria-label={`Export CSV for stream ${key}`}
-                      >
-                        Export CSV
-                      </button>
-                    </div>
-
-                    {/* ── Transaction History ── */}
-                    {historyStreamId === s.id && (
-                      <div id={`history-${key}`} className="history-panel" role="region" aria-label={`Transaction history for stream ${key}`}>
-                        <h3>Transaction History</h3>
-                        {history.error && (
-                          <p role="alert" className="error-banner">{history.error}</p>
-                        )}
-                        {history.records.length === 0 && !history.loading && !history.error && (
-                          <p className="muted">No transactions found.</p>
-                        )}
-                        {history.records.length > 0 && (
-                          <table className="history-table" aria-label="Transaction history">
-                            <thead>
-                              <tr>
-                                <th scope="col">Timestamp</th>
-                                <th scope="col">Type</th>
-                                <th scope="col">Amount</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {history.records.map((r) => (
-                                <tr key={r.id}>
-                                  <td>{r.timestamp ? new Date(r.timestamp).toLocaleString() : "—"}</td>
-                                  <td>{r.type}</td>
-                                  <td>{r.amount ?? "—"}</td>
+                          <h3>Transaction History</h3>
+                          {history.error && (
+                            <p role="alert" className="error-banner">{history.error}</p>
+                          )}
+                          {history.records.length === 0 && !history.loading && !history.error && (
+                            <p className="muted">No transactions found.</p>
+                          )}
+                          {history.records.length > 0 && (
+                            <table className="history-table" aria-label="Transaction history">
+                              <thead>
+                                <tr>
+                                  <th scope="col">Timestamp</th>
+                                  <th scope="col">Type</th>
+                                  <th scope="col">Amount</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                        {history.loading && <p aria-live="polite" aria-busy="true">Loading…</p>}
-                        {history.hasMore && !history.loading && (
-                          <button
-                            onClick={() => history.loadMore(s.id)}
-                            className="btn btn-secondary"
-                            aria-label="Load more transactions"
-                          >
-                            Load more
-                          </button>
-                        )}
-                        {history.records.length > 0 && (
-                          <button
-                            onClick={() => handleExportCsv(s.id)}
-                            className="btn btn-secondary"
-                            style={{ marginTop: 8 }}
-                            aria-label={`Export all history for stream ${key} as CSV`}
-                          >
-                            Export all as CSV
-                          </button>
-                        )}
-                      </div>
-                    )}
+                              </thead>
+                              <tbody>
+                                {history.records.map((r) => (
+                                  <tr key={r.id}>
+                                    <td>{r.timestamp ? new Date(r.timestamp).toLocaleString() : "—"}</td>
+                                    <td>{r.type}</td>
+                                    <td>{r.amount ?? "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                          {history.loading && <p aria-live="polite" aria-busy="true">Loading…</p>}
+                          {history.hasMore && !history.loading && (
+                            <button
+                              onClick={() => history.loadMore(s.id)}
+                              className="btn btn-secondary"
+                              aria-label="Load more transactions"
+                            >
+                              Load more
+                            </button>
+                          )}
+                          {history.records.length > 0 && (
+                            <button
+                              onClick={() => handleExportCsv(s.id)}
+                              className="btn btn-secondary"
+                              style={{ marginTop: 8 }}
+                              aria-label={`Export all history for stream ${key} as CSV`}
+                            >
+                              Export all as CSV
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </StreamStatusCard>
                   </li>
                 );
               })}
