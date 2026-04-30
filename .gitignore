@@ -5,3 +5,9 @@ target/
 .claude/
 skills-lock.json
 issue.md
+
+# Node.js
+node_modules/
+dist/
+build/
+.tsbuildinfo
