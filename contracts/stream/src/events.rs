@@ -15,6 +15,11 @@ pub fn stream_status_changed(env: &Env, id: u64, status: &StreamStatus) {
     env.events().publish((symbol_short!("status"), id), status.clone());
 }
 
+/// Emitted when a stream is cancelled by the employer.
+pub fn stream_cancelled(env: &Env, id: u64, employer: &Address, employee: &Address, refund: i128, employee_payout: i128) {
+    env.events().publish((symbol_short!("cancelled"), id), (employer.clone(), employee.clone(), refund, employee_payout));
+}
+
 /// Emitted when a stream is paused by the employer.
 /// Includes employee address for notification purposes.
 pub fn stream_paused(env: &Env, id: u64, employer: &Address, employee: &Address, paused_at: u64) {

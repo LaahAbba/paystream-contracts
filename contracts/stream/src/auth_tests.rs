@@ -83,7 +83,7 @@ fn test_propose_admin_unauthorized() {
     client.initialize(&admin);
     
     // Attacker tries to propose a new admin
-    client.propose_admin(&new_admin);
+    client.propose_admin(&attacker, &new_admin);
 }
 
 /// Non-pending-admin cannot accept admin transfer.
@@ -96,7 +96,7 @@ fn test_accept_admin_unauthorized() {
     let attacker = Address::generate(&env);
     
     client.initialize(&admin);
-    client.propose_admin(&pending_admin);
+    client.propose_admin(&admin, &pending_admin);
     
     // Attacker (not the pending admin) tries to accept
     client.accept_admin(&attacker);
@@ -113,7 +113,7 @@ fn test_pause_contract_unauthorized() {
     client.initialize(&admin);
     
     // Attacker tries to pause
-    client.pause_contract(&0);
+    client.pause_contract(&attacker, &0);
 }
 
 /// Non-admin cannot unpause the contract.
@@ -125,10 +125,10 @@ fn test_unpause_contract_unauthorized() {
     let attacker = Address::generate(&env);
     
     client.initialize(&admin);
-    client.pause_contract(&0);
+    client.pause_contract(&admin, &0);
     
     // Attacker tries to unpause
-    client.unpause_contract(&1);
+    client.unpause_contract(&attacker, &1);
 }
 
 /// Non-admin cannot set min_deposit.
@@ -176,7 +176,7 @@ fn test_set_max_streams_per_employer_unauthorized() {
 
 /// Non-admin cannot upgrade the contract.
 #[test]
-#[should_panic(expected = "admin not set")]
+#[should_panic(expected = "not the admin")]
 fn test_upgrade_unauthorized() {
     let (env, client) = setup();
     let admin = Address::generate(&env);
@@ -185,10 +185,10 @@ fn test_upgrade_unauthorized() {
     client.initialize(&admin);
     
     // Create a dummy wasm hash
-    let fake_hash = env.crypto().sha256(&soroban_sdk::Bytes::from_slice(&env, &[1u8; 32]));
+    let fake_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
     
     // Attacker tries to upgrade (will fail because attacker is not admin)
-    client.upgrade(&fake_hash, &0);
+    client.upgrade(&attacker, &fake_hash, &0);
 }
 
 /// Non-admin cannot call migrate.
@@ -683,6 +683,9 @@ fn test_employer_cannot_control_other_stream() {
     let employee_a = Address::generate(&env);
     let employee_b = Address::generate(&env);
     let token_id = setup_token(&env, &employer_a);
+    // Give employer_b tokens too
+    let token = paystream_token::TokenContractClient::new(&env, &token_id);
+    token.transfer(&employer_a, &employer_b, &20_000);
     
     client.initialize(&admin);
     let stream_a = client.create_stream(&employer_a, &employee_a, &token_id, &10_000, &10, &0, &0, &0);
@@ -703,6 +706,9 @@ fn test_employee_cannot_withdraw_from_other_stream() {
     let employee_a = Address::generate(&env);
     let employee_b = Address::generate(&env);
     let token_id = setup_token(&env, &employer_a);
+    // Give employer_b tokens too
+    let token = paystream_token::TokenContractClient::new(&env, &token_id);
+    token.transfer(&employer_a, &employer_b, &20_000);
     
     client.initialize(&admin);
     let stream_a = client.create_stream(&employer_a, &employee_a, &token_id, &10_000, &10, &0, &0, &0);
@@ -758,7 +764,7 @@ fn test_pause_contract_wrong_nonce() {
     client.initialize(&admin);
     
     // Use wrong nonce (should be 0, using 5)
-    client.pause_contract(&5);
+    client.pause_contract(&admin, &5);
 }
 
 /// Admin with wrong nonce cannot upgrade contract.
@@ -770,8 +776,8 @@ fn test_upgrade_wrong_nonce() {
     
     client.initialize(&admin);
     
-    let fake_hash = env.crypto().sha256(&soroban_sdk::Bytes::from_slice(&env, &[1u8; 32]));
+    let fake_hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
     
     // Use wrong nonce (should be 0, using 10)
-    client.upgrade(&fake_hash, &10);
+    client.upgrade(&admin, &fake_hash, &10);
 }
