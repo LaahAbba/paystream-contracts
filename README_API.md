@@ -60,6 +60,17 @@ npm start
 
 The API will be available at `http://localhost:3000`
 
+### Health and Readiness Probes
+
+The API exposes unauthenticated probe endpoints for runtime monitoring:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Returns process health, uptime, start time, timestamp, and API version |
+| GET | `/ready` | Checks configured dependencies and returns `503` when Soroban RPC or an optional database dependency is unavailable |
+
+`/ready` checks Soroban RPC via `SOROBAN_RPC_URL`. If `DATABASE_URL` is configured, it also opens a short TCP connection to that database endpoint before reporting ready.
+
 ### API Documentation
 
 Once the server is running, visit `http://localhost:3000/api-docs` to explore the interactive OpenAPI documentation.

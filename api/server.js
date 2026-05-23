@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const authMiddleware = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
+const readinessService = require('./services/readinessService');
 const streamRoutes = require('./routes/streams');
 const tokenRoutes = require('./routes/tokens');
 const adminRoutes = require('./routes/admin');
@@ -16,6 +17,7 @@ const governanceRoutes = require('./routes/governance');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const startedAt = new Date();
 
 // Security middleware
 app.use(helmet());
@@ -139,8 +141,15 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    started_at: startedAt.toISOString(),
     version: '1.0.0',
   });
+});
+
+app.get('/ready', async (req, res) => {
+  const readiness = await readinessService.checkReadiness();
+  res.status(readiness.ready ? 200 : 503).json(readiness);
 });
 
 // API routes
