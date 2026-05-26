@@ -94,6 +94,39 @@ pub struct Proposal {
     pub executable_after: u64,
 }
 
+// ---------------------------------------------------------------------------
+// Packed config (#272) — all small scalar config fields in one ledger entry
+// to reduce the number of instance-storage reads per hot-path call.
+//
+// Layout:
+//   min_deposit         i128  — minimum deposit for stream creation
+//   fee_bps             u32   — protocol fee in basis points (0–100)
+//   max_streams         u32   — max streams per employer
+//   admin_nonce         u64   — replay-protection nonce for admin ops
+//   paused              bool  — global contract pause flag
+// ---------------------------------------------------------------------------
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct ContractConfig {
+    pub min_deposit: i128,
+    pub fee_bps: u32,
+    pub max_streams: u32,
+    pub admin_nonce: u64,
+    pub paused: bool,
+}
+
+impl ContractConfig {
+    pub fn default() -> Self {
+        ContractConfig {
+            min_deposit: 10_000,
+            fee_bps: 0,
+            max_streams: 100,
+            admin_nonce: 0,
+            paused: false,
+        }
+    }
+}
+
 /// Storage keys.
 #[contracttype]
 pub enum DataKey {
@@ -118,6 +151,11 @@ pub enum DataKey {
     Proposal(u64),
     ProposalCount,
     Voted(u64, Address),
+    // Token allowlist (#292)
+    AllowedToken(Address),
+    AllowedTokens,
+    // Packed config (#272) — replaces individual MinDeposit/FeeBps/MaxStreamsPerEmployer/AdminNonce/Paused keys
+    Config,
 }
 
 pub const ERR_ZERO_RATE: &str = "E001: rate_per_second must be greater than zero";
@@ -139,3 +177,4 @@ pub const ERR_MAX_STREAMS_REACHED: &str = "E015: maximum streams per employer re
 pub const ERR_WITHDRAW_COOLDOWN: &str = "E010: withdraw cooldown not expired";
 pub const ERR_ALREADY_PAUSED: &str = "E016: stream is already paused";
 pub const ERR_NOT_PAUSED: &str = "E017: stream is not paused";
+pub const ERR_TOKEN_NOT_ALLOWED: &str = "E018: token is not on the allowlist";

@@ -31,12 +31,17 @@ use storage::{
     save_proposal, save_stream, set_admin, set_fee_bps, set_fee_recipient,
     set_max_streams_per_employer, set_min_deposit, set_pending_admin, set_pending_employer,
     tally_proposal,
+    add_allowed_token as storage_add_allowed_token,
+    remove_allowed_token as storage_remove_allowed_token,
+    get_allowed_tokens as storage_get_allowed_tokens,
+    is_token_allowed,
+    get_paused_cfg, set_paused_cfg,
 };
 use types::{
     DataKey, GovParam, PauseEvent, Proposal, ProposalStatus, Stream, StreamParams, StreamStatus,
     ERR_ALREADY_PAUSED, ERR_FEE_TOO_HIGH, ERR_INVALID_TOKEN, ERR_NOT_PAUSED, ERR_OVERFLOW,
-    ERR_REENTRANT, ERR_STREAM_CANCELLED, ERR_STREAM_EXHAUSTED, ERR_UNAUTHORIZED_TRANSFER,
-    ERR_WITHDRAW_COOLDOWN, ERR_ZERO_DEPOSIT, ERR_ZERO_RATE,
+    ERR_REENTRANT, ERR_STREAM_CANCELLED, ERR_STREAM_EXHAUSTED, ERR_TOKEN_NOT_ALLOWED,
+    ERR_UNAUTHORIZED_TRANSFER, ERR_WITHDRAW_COOLDOWN, ERR_ZERO_DEPOSIT, ERR_ZERO_RATE,
 };
 use validate::{validate_create_stream, validate_max_streams, validate_top_up, MAX_RATE_PER_SECOND};
 
@@ -46,14 +51,6 @@ const WARN_1_DAY: u64 = 24 * 3600;
 
 /// Governance timelock: 2 days in seconds (#124).
 const GOV_TIMELOCK: u64 = 2 * 24 * 3600;
-
-fn get_paused(env: &Env) -> bool {
-    env.storage().instance().get(&DataKey::Paused).unwrap_or(false)
-}
-
-fn set_paused(env: &Env, paused: bool) {
-    env.storage().instance().set(&DataKey::Paused, &paused);
-}
 
 /// Emit near_exhaustion warning if remaining funds are below 7-day or 1-day threshold (#121).
 fn maybe_warn_exhaustion(env: &Env, stream: &Stream) {
@@ -96,7 +93,7 @@ impl StreamContract {
         admin.require_auth();
         require_admin(&env, &admin);
         consume_admin_nonce(&env, nonce);
-        set_paused(&env, true);
+        set_paused_cfg(&env, true);
         events::contract_paused(&env, true);
     }
 
@@ -104,7 +101,7 @@ impl StreamContract {
         admin.require_auth();
         require_admin(&env, &admin);
         consume_admin_nonce(&env, nonce);
-        set_paused(&env, false);
+        set_paused_cfg(&env, false);
         events::contract_paused(&env, false);
     }
 
@@ -132,6 +129,29 @@ impl StreamContract {
         set_max_streams_per_employer(&env, limit);
     }
 
+    // ---------------------------------------------------------------------------
+    // Token allowlist (#292)
+    // ---------------------------------------------------------------------------
+
+    /// Add a token to the admin-controlled allowlist.
+    pub fn add_allowed_token(env: Env, admin: Address, token: Address) {
+        admin.require_auth();
+        require_admin(&env, &admin);
+        storage_add_allowed_token(&env, &token);
+    }
+
+    /// Remove a token from the allowlist.
+    pub fn remove_allowed_token(env: Env, admin: Address, token: Address) {
+        admin.require_auth();
+        require_admin(&env, &admin);
+        storage_remove_allowed_token(&env, &token);
+    }
+
+    /// Return the current allowlist. Empty list means allowlist not yet configured (all tokens pass).
+    pub fn get_allowed_tokens(env: Env) -> Vec<Address> {
+        storage_get_allowed_tokens(&env)
+    }
+
     /// Create a salary stream with an optional cliff period (#123).
     ///
     /// `cliff_time` — ledger timestamp before which nothing is claimable (0 = no cliff).
@@ -157,7 +177,7 @@ impl StreamContract {
     ) -> u64 {
         assert!(!is_globally_paused(&env), "{}", ERR_GLOBAL_PAUSED);
         employer.require_auth();
-        assert!(!get_paused(&env), "contract is paused");
+        assert!(!get_paused_cfg(&env), "contract is paused");
 
         let current_count = get_employer_streams(&env, &employer).len();
         let max_limit = get_max_streams_per_employer(&env);
@@ -173,6 +193,7 @@ impl StreamContract {
 
         let token_client = token::Client::new(&env, &token_address);
         let _ = token_client.try_balance(&employer).expect(ERR_INVALID_TOKEN);
+        assert!(is_token_allowed(&env, &token_address), "{}", ERR_TOKEN_NOT_ALLOWED);
         token_client.transfer(&employer, &env.current_contract_address(), &deposit);
 
         let id = next_id(&env);
@@ -203,7 +224,7 @@ impl StreamContract {
 
     pub fn create_streams_batch(env: Env, employer: Address, params: Vec<StreamParams>) -> Vec<u64> {
         employer.require_auth();
-        assert!(!get_paused(&env), "contract is paused");
+        assert!(!get_paused_cfg(&env), "contract is paused");
         assert!(!params.is_empty(), "params must not be empty");
 
         let now = env.ledger().timestamp();
@@ -221,6 +242,7 @@ impl StreamContract {
 
             let token_client = token::Client::new(&env, &p.token);
             let _ = token_client.try_balance(&employer).expect(ERR_INVALID_TOKEN);
+            assert!(is_token_allowed(&env, &p.token), "{}", ERR_TOKEN_NOT_ALLOWED);
             token_client.transfer(&employer, &env.current_contract_address(), &p.deposit);
 
             let id = next_id(&env);
@@ -253,7 +275,7 @@ impl StreamContract {
     pub fn withdraw(env: Env, employee: Address, stream_id: u64) -> i128 {
         assert!(!is_globally_paused(&env), "{}", ERR_GLOBAL_PAUSED);
         employee.require_auth();
-        assert!(!get_paused(&env), "contract is paused");
+        assert!(!get_paused_cfg(&env), "contract is paused");
         let mut stream = require_employee_by_id(&env, &employee, stream_id);
         assert!(
             stream.status == StreamStatus::Active || stream.status == StreamStatus::Exhausted,
