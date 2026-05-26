@@ -123,7 +123,7 @@ fn test_pause_and_resume() {
 
     // 50s after resume
     env.ledger().with_mut(|l| l.timestamp += 50);
-    assert_eq!(client.claimable(&id), 500); // only 50s counted
+    assert_eq!(client.claimable(&id), 1500); // 100s pre-pause + 50s post-resume = 150s active
 }
 
 #[test]
@@ -314,6 +314,7 @@ fn test_claimable_overflow_panics() {
         stop_time: 0,
         last_withdraw_time: 0,
         status: StreamStatus::Active,
+        paused_at: 0,
         locked: false,
     };
 
@@ -344,6 +345,7 @@ fn test_claimable_large_elapsed_capped_by_deposit() {
         stop_time: 0,
         last_withdraw_time: 0,
         status: StreamStatus::Active,
+        paused_at: 0,
         locked: false,
     };
 
@@ -384,4 +386,135 @@ fn test_create_stream_positive_rate_ok() {
     let id = client.create_stream(&employer, &employee, &token_id, &3600, &1, &0);
     assert_eq!(id, 1);
     assert_eq!(client.get_stream(&id).rate_per_second, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #271 – Emergency global pause
+// ---------------------------------------------------------------------------
+
+#[test]
+#[should_panic(expected = "E005")]
+fn test_create_stream_blocked_when_globally_paused() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.pause_all();
+    client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+}
+
+#[test]
+#[should_panic(expected = "E005")]
+fn test_withdraw_blocked_when_globally_paused() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.pause_all();
+    client.withdraw(&employee, &id);
+}
+
+#[test]
+fn test_resume_all_unblocks_operations() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.pause_all();
+    assert!(client.is_paused());
+    client.resume_all();
+    assert!(!client.is_paused());
+    // Should succeed after resume
+    client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #283 – Per-employer stream limit
+// ---------------------------------------------------------------------------
+
+#[test]
+#[should_panic(expected = "E006")]
+fn test_stream_limit_exceeded() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_stream_limit(&2); // set limit to 2
+    client.create_stream(&employer, &employee, &token_id, &1000, &1, &0);
+    client.create_stream(&employer, &employee, &token_id, &1000, &1, &0);
+    // Third stream must fail
+    client.create_stream(&employer, &employee, &token_id, &1000, &1, &0);
+}
+
+#[test]
+fn test_cancel_decrements_stream_count() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_stream_limit(&1);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+    client.cancel_stream(&employer, &id);
+    // After cancel, slot is freed — should succeed
+    client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #270 – Upgrade mechanism with 48h timelock
+// ---------------------------------------------------------------------------
+
+#[test]
+#[should_panic(expected = "E008")]
+fn test_execute_upgrade_before_timelock_panics() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+    client.schedule_upgrade(&hash);
+    // Only 1 hour has passed — timelock not elapsed
+    env.ledger().with_mut(|l| l.timestamp += 3600);
+    client.execute_upgrade();
+}
+
+#[test]
+#[should_panic(expected = "E007")]
+fn test_schedule_upgrade_twice_panics() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+    client.schedule_upgrade(&hash);
+    client.schedule_upgrade(&hash); // second schedule must fail
+}
+
+#[test]
+fn test_cancel_upgrade_clears_pending() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    let hash = soroban_sdk::BytesN::from_array(&env, &[1u8; 32]);
+    client.schedule_upgrade(&hash);
+    assert!(client.pending_upgrade().is_some());
+    client.cancel_upgrade();
+    assert!(client.pending_upgrade().is_none());
 }

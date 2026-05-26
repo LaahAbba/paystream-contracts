@@ -1,8 +1,12 @@
-use soroban_sdk::{Env, Address};
+use soroban_sdk::{Env, Address, BytesN, Vec};
 use crate::types::{DataKey, Stream, StreamStatus, ERR_OVERFLOW};
 
 /// Default minimum deposit (10_000 stroops = 0.001 XLM equivalent).
 pub const DEFAULT_MIN_DEPOSIT: i128 = 10_000;
+/// Default max active streams per employer.
+pub const DEFAULT_STREAM_LIMIT: u32 = 1000;
+/// Upgrade timelock: 48 hours in seconds.
+pub const UPGRADE_TIMELOCK_SECS: u64 = 48 * 60 * 60;
 
 pub fn save_stream(env: &Env, stream: &Stream) {
     env.storage().persistent().set(&DataKey::Stream(stream.id), stream);
@@ -86,4 +90,60 @@ pub fn index_employer_stream(env: &Env, employer: &Address, stream_id: u64) {
 pub fn get_employer_streams(env: &Env, employer: &Address) -> Vec<u64> {
     let key = DataKey::EmployerStreams(employer.clone());
     env.storage().persistent().get(&key).unwrap_or_else(|| Vec::new(env))
+}
+
+// ---------------------------------------------------------------------------
+// Global pause (#271)
+// ---------------------------------------------------------------------------
+
+pub fn is_globally_paused(env: &Env) -> bool {
+    env.storage().instance().get(&DataKey::GlobalPaused).unwrap_or(false)
+}
+
+pub fn set_globally_paused(env: &Env, paused: bool) {
+    env.storage().instance().set(&DataKey::GlobalPaused, &paused);
+}
+
+// ---------------------------------------------------------------------------
+// Employer stream count / limit (#283)
+// ---------------------------------------------------------------------------
+
+pub fn get_employer_stream_count(env: &Env, employer: &Address) -> u32 {
+    env.storage().instance().get(&DataKey::EmployerStreamCount(employer.clone())).unwrap_or(0)
+}
+
+pub fn increment_employer_stream_count(env: &Env, employer: &Address) {
+    let count = get_employer_stream_count(env, employer);
+    env.storage().instance().set(&DataKey::EmployerStreamCount(employer.clone()), &(count + 1));
+}
+
+pub fn decrement_employer_stream_count(env: &Env, employer: &Address) {
+    let count = get_employer_stream_count(env, employer);
+    if count > 0 {
+        env.storage().instance().set(&DataKey::EmployerStreamCount(employer.clone()), &(count - 1));
+    }
+}
+
+pub fn get_stream_limit(env: &Env) -> u32 {
+    env.storage().instance().get(&DataKey::EmployerStreamLimit).unwrap_or(DEFAULT_STREAM_LIMIT)
+}
+
+pub fn set_stream_limit(env: &Env, limit: u32) {
+    env.storage().instance().set(&DataKey::EmployerStreamLimit, &limit);
+}
+
+// ---------------------------------------------------------------------------
+// Upgrade pending (#270)
+// ---------------------------------------------------------------------------
+
+pub fn get_upgrade_pending(env: &Env) -> Option<(BytesN<32>, u64)> {
+    env.storage().instance().get(&DataKey::UpgradePending)
+}
+
+pub fn set_upgrade_pending(env: &Env, new_wasm_hash: &BytesN<32>, scheduled_at: u64) {
+    env.storage().instance().set(&DataKey::UpgradePending, &(new_wasm_hash.clone(), scheduled_at));
+}
+
+pub fn clear_upgrade_pending(env: &Env) {
+    env.storage().instance().remove(&DataKey::UpgradePending);
 }

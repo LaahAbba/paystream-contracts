@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Validate required environment variables before proceeding
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/validate-env.sh"
+
 NETWORK="testnet"
 SOURCE="${STELLAR_SOURCE_ACCOUNT:-default}"
 ADMIN="${STELLAR_ADMIN_ADDRESS:?Set STELLAR_ADMIN_ADDRESS}"
