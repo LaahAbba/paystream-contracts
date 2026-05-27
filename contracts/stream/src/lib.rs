@@ -32,6 +32,7 @@ impl StreamContract {
         deposit: i128,
         rate_per_second: i128,
         stop_time: u64,
+        cooldown_period: u64,
     ) -> u64 {
         employer.require_auth();
         assert!(deposit > 0, "deposit must be positive");
@@ -58,6 +59,7 @@ impl StreamContract {
             start_time: now,
             stop_time,
             last_withdraw_time: now,
+            cooldown_period,
             status: StreamStatus::Active,
         };
         save_stream(&env, &stream);
@@ -66,15 +68,31 @@ impl StreamContract {
     }
 
     /// Employee withdraws all claimable tokens earned so far.
-    pub fn withdraw(env: Env, employee: Address, stream_id: u64) -> i128 {
+    pub fn withdraw(env: Env, employee: Address, stream_id: u64) -> Result<i128, types::Error> {
         employee.require_auth();
-        let mut stream = load_stream(&env, stream_id).expect("stream not found");
-        assert_eq!(stream.employee, employee, "not the employee");
-        assert_eq!(stream.status, StreamStatus::Active, "stream not active");
+        let mut stream = load_stream(&env, stream_id).ok_or(types::Error::StreamNotFound)?;
+        if stream.employee != employee {
+            return Err(types::Error::NotEmployee);
+        }
+        if stream.status != StreamStatus::Active {
+            return Err(types::Error::StreamNotActive);
+        }
 
         let now = env.ledger().timestamp();
+        if stream.cooldown_period > 0 {
+            let next_withdraw_time = stream.last_withdraw_time + stream.cooldown_period;
+            if now < next_withdraw_time {
+                // Return the next allowed withdraw time in the host error message so callers
+                // (and off-chain clients) can act on it. This produces a HostError carrying
+                // the message `CooldownNotMet: next_withdraw_time=<unix_ts>`.
+                panic!("CooldownNotMet: next_withdraw_time={}", next_withdraw_time);
+            }
+        }
+
         let amount = claimable_amount(&stream, now);
-        assert!(amount > 0, "nothing to withdraw");
+        if amount <= 0 {
+            return Err(types::Error::NothingToWithdraw);
+        }
 
         stream.withdrawn += amount;
         stream.last_withdraw_time = now;
@@ -89,7 +107,7 @@ impl StreamContract {
 
         save_stream(&env, &stream);
         events::withdrawn(&env, stream_id, &employee, amount);
-        amount
+        Ok(amount)
     }
 
     /// Employer tops up an active stream with additional funds.

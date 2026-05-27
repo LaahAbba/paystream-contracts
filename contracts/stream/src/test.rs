@@ -30,7 +30,7 @@ fn test_create_stream() {
     let token_id = setup_token(&env, &employer);
 
     client.initialize(&admin);
-    let id = client.create_stream(&employer, &employee, &token_id, &3600, &1, &0);
+    let id = client.create_stream(&employer, &employee, &token_id, &3600, &1, &0, &0);
     assert_eq!(id, 1);
     assert_eq!(client.stream_count(), 1);
 
@@ -50,7 +50,7 @@ fn test_claimable_increases_with_time() {
     let token_id = setup_token(&env, &employer);
 
     client.initialize(&admin);
-    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0);
 
     env.ledger().with_mut(|l| l.timestamp += 100);
     assert_eq!(client.claimable(&id), 1000);
@@ -65,7 +65,7 @@ fn test_withdraw() {
     let token_id = setup_token(&env, &employer);
 
     client.initialize(&admin);
-    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0);
 
     env.ledger().with_mut(|l| l.timestamp += 200);
     let withdrawn = client.withdraw(&employee, &id);
@@ -85,7 +85,7 @@ fn test_stream_exhausted_when_fully_withdrawn() {
     let token_id = setup_token(&env, &employer);
 
     client.initialize(&admin);
-    let id = client.create_stream(&employer, &employee, &token_id, &500, &10, &0);
+    let id = client.create_stream(&employer, &employee, &token_id, &500, &10, &0, &0);
 
     env.ledger().with_mut(|l| l.timestamp += 100);
     let withdrawn = client.withdraw(&employee, &id);
@@ -102,7 +102,7 @@ fn test_pause_and_resume() {
     let token_id = setup_token(&env, &employer);
 
     client.initialize(&admin);
-    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0);
 
     env.ledger().with_mut(|l| l.timestamp += 100);
     client.pause_stream(&employer, &id);
@@ -125,7 +125,7 @@ fn test_cancel_stream_refunds_employer() {
     let token_id = setup_token(&env, &employer);
 
     client.initialize(&admin);
-    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0);
 
     env.ledger().with_mut(|l| l.timestamp += 100);
     client.cancel_stream(&employer, &id);
@@ -145,7 +145,7 @@ fn test_stop_time_caps_claimable() {
 
     client.initialize(&admin);
     let now = env.ledger().timestamp();
-    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &(now + 50));
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &(now + 50), &0);
 
     env.ledger().with_mut(|l| l.timestamp += 200);
     assert_eq!(client.claimable(&id), 500); // capped at 50s * 10
@@ -161,9 +161,44 @@ fn test_cannot_withdraw_from_cancelled_stream() {
     let token_id = setup_token(&env, &employer);
 
     client.initialize(&admin);
-    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0);
     client.cancel_stream(&employer, &id);
 
     env.ledger().with_mut(|l| l.timestamp += 100);
     client.withdraw(&employee, &id);
+}
+
+#[test]
+fn test_withdraw_cooldown() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    // 1 day cooldown (86400 seconds)
+    let cooldown = 86400;
+    let id = client.create_stream(&employer, &employee, &token_id, &1_000_000, &1, &0, &cooldown);
+
+    // Advance 1 hour, withdraw should work first time
+    env.ledger().with_mut(|l| l.timestamp += 3600);
+    client.withdraw(&employee, &id);
+
+    // Advance another hour, withdraw should fail
+    env.ledger().with_mut(|l| l.timestamp += 3600);
+    // Read stream state to compute expected next withdraw time, then assert the
+    // error message includes that timestamp.
+    let s = client.get_stream(&id);
+    let expected_next = s.last_withdraw_time + s.cooldown_period;
+    let result = client.try_withdraw(&employee, &id);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    let err_str = format!("{:?}", err);
+    assert!(err_str.contains(&expected_next.to_string()));
+
+    // Advance to after cooldown (86400 - 3600 = 82800 more seconds)
+    env.ledger().with_mut(|l| l.timestamp += 82800);
+    let withdrawn = client.withdraw(&employee, &id);
+    assert!(withdrawn > 0);
 }
