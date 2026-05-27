@@ -66,3 +66,24 @@ pub fn proposal_created(env: &Env, id: u64) {
 pub fn proposal_executed(env: &Env, id: u64) {
     env.events().publish((symbol_short!("propexec"), id), id);
 }
+
+pub fn global_paused(env: &Env, paused: bool) {
+    env.events().publish(
+        (symbol_short!("glb_pause"),),
+        paused,
+    );
+}
+
+pub fn upgrade_scheduled(env: &Env, new_wasm_hash: &BytesN<32>, scheduled_at: u64) {
+    env.events().publish(
+        (symbol_short!("upg_sched"),),
+        (new_wasm_hash.clone(), scheduled_at),
+    );
+}
+
+pub fn upgrade_executed(env: &Env, new_wasm_hash: &BytesN<32>) {
+    env.events().publish(
+        (symbol_short!("upg_exec"),),
+        new_wasm_hash.clone(),
+    );
+}
