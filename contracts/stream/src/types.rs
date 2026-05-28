@@ -62,10 +62,12 @@ pub enum DataKey {
     AdminNonce,
     /// Contract-wide pause flag.
     Paused,
-    /// Index: employer address → Vec<u64> of stream IDs they own.
+        /// Index: employer address → Vec<u64> of stream IDs they own.
     EmployerStreams(Address),
     /// Index: employee address → Vec<u64> of stream IDs paying them.
     EmployeeStreams(Address),
+    PendingAdmin,
+    /// Minimum deposit enforced on create_stream.
     MinDeposit,
 }
 

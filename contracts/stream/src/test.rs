@@ -82,6 +82,29 @@ fn test_withdraw() {
 }
 
 #[test]
+fn test_transfer_stream_preserves_claimable() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let new_employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0);
+
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.transfer_stream(&employee, &id, &new_employee);
+
+    let s = client.get_stream(&id);
+    assert_eq!(s.employee, new_employee);
+
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    let withdrawn = client.withdraw(&new_employee, &id);
+    assert_eq!(withdrawn, 2000);
+}
+
+#[test]
 #[should_panic(expected = "E010")]
 fn test_withdraw_before_cooldown_rejected() {
     let (env, client) = setup();

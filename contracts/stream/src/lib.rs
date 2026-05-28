@@ -14,7 +14,7 @@ use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, Vec};
 use storage::{
     claimable_amount, consume_admin_nonce, get_admin, get_admin_nonce, get_employee_streams,
     get_employer_streams, get_min_deposit, index_employee_stream, index_employer_stream,
-    load_stream, next_id, save_stream, set_admin, set_min_deposit,
+    load_stream, next_id, save_stream, set_admin, set_min_deposit, transfer_employee_stream,
 };
 use types::{
     DataKey, Stream, StreamParams, StreamStatus, ERR_REENTRANT, ERR_STREAM_CANCELLED,
@@ -337,6 +337,38 @@ impl StreamContract {
         amount
     }
 
+    /// Employee transfers their stream rights to another address.
+    ///
+    /// The pending claimable amount remains with the stream and becomes
+    /// available to the new employee.
+    ///
+    /// # Parameters
+    /// - `employee` — current employee authority
+    /// - `stream_id` — ID of the stream to transfer
+    /// - `new_employee` — address receiving the stream rights
+    ///
+    /// # Errors
+    /// - Panics if stream not found
+    /// - Panics if caller is not the current employee
+    /// - Panics if `new_employee` is the same as the current employee
+    /// - Panics if stream is not Active or Paused
+    pub fn transfer_stream(env: Env, employee: Address, stream_id: u64, new_employee: Address) {
+        employee.require_auth();
+        let mut stream = load_stream(&env, stream_id).expect("stream not found");
+        assert_eq!(stream.employee, employee, "not the employee");
+        assert_ne!(stream.employee, new_employee, "new employee must differ");
+        assert!(
+            stream.status == StreamStatus::Active || stream.status == StreamStatus::Paused,
+            "stream not transferable"
+        );
+
+        let old_employee = stream.employee.clone();
+        stream.employee = new_employee.clone();
+        save_stream(&env, &stream);
+        transfer_employee_stream(&env, &old_employee, &new_employee, stream_id);
+        events::stream_transferred(&env, stream_id, &old_employee, &new_employee);
+    }
+
     /// Employer tops up an active stream with additional funds.
     ///
     /// Increases `deposit` by `amount`. The stream's rate and timeline are
@@ -394,7 +426,7 @@ impl StreamContract {
         assert_eq!(stream.status, StreamStatus::Active, "stream not active");
         stream.status = StreamStatus::Paused;
         save_stream(&env, &stream);
-        events::stream_status_changed(&env, stream_id, &StreamStatus::Paused);
+        events::stream_paused(&env, stream_id);
     }
 
     /// Employer resumes a paused stream, restarting token accrual.
@@ -418,7 +450,7 @@ impl StreamContract {
         stream.last_withdraw_time = env.ledger().timestamp();
         stream.status = StreamStatus::Active;
         save_stream(&env, &stream);
-        events::stream_status_changed(&env, stream_id, &StreamStatus::Active);
+        events::stream_resumed(&env, stream_id);
     }
 
     /// Employer cancels a stream and reclaims unstreamed funds.
@@ -463,7 +495,7 @@ impl StreamContract {
 
         stream.status = StreamStatus::Cancelled;
         save_stream(&env, &stream);
-        events::stream_status_changed(&env, stream_id, &StreamStatus::Cancelled);
+        events::stream_cancelled(&env, stream_id);
     }
 
     /// Read the full state of a stream by ID.

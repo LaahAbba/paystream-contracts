@@ -126,6 +126,24 @@ pub fn index_employee_stream(env: &Env, employee: &Address, stream_id: u64) {
     env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
 }
 
+pub fn transfer_employee_stream(env: &Env, old_employee: &Address, new_employee: &Address, stream_id: u64) {
+    let old_key = DataKey::EmployeeStreams(old_employee.clone());
+    let old_ids: Vec<u64> = env.storage().persistent().get(&old_key).unwrap_or_else(|| Vec::new(env));
+    let mut updated: Vec<u64> = Vec::new(env);
+    let len = old_ids.len();
+    let mut i = 0;
+    while i < len {
+        let id = old_ids.get(i).expect("index out of bounds");
+        if id != stream_id {
+            updated.push_back(id);
+        }
+        i += 1;
+    }
+    env.storage().persistent().set(&old_key, &updated);
+    env.storage().persistent().extend_ttl(&old_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    index_employee_stream(env, new_employee, stream_id);
+}
+
 /// Return all stream IDs paying `employee`.
 pub fn get_employee_streams(env: &Env, employee: &Address) -> Vec<u64> {
     let key = DataKey::EmployeeStreams(employee.clone());
