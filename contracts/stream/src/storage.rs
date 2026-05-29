@@ -37,8 +37,18 @@ pub const DEFAULT_STREAM_LIMIT: u32 = 1000;
 /// Upgrade timelock: 48 hours in seconds.
 pub const UPGRADE_TIMELOCK_SECS: u64 = 48 * 60 * 60;
 
-const TTL_THRESHOLD: u32 = 6_307_200;
-const TTL_EXTEND_TO: u32 = 12_614_400;
+/// Minimum remaining TTL (in ledgers) before a persistent entry is extended.
+/// Default: ~1 year at 5s/ledger (6 307 200 ledgers ≈ 365 days).
+/// Override at compile time via the `TTL_THRESHOLD` env var (build.rs not required;
+/// change the constant here when deploying to a network with a different ledger rate).
+pub const TTL_THRESHOLD: u32 = 6_307_200;
+
+/// Target TTL (in ledgers) after extension.
+/// Default: ~2 years at 5s/ledger (12 614 400 ledgers ≈ 730 days).
+pub const TTL_EXTEND_TO: u32 = 12_614_400;
+
+/// Warn threshold: ~30 days in ledgers at 5s/ledger.
+pub const TTL_WARN_THRESHOLD: u32 = 518_400;
 
 // ---------------------------------------------------------------------------
 // Packed config helpers (#272)

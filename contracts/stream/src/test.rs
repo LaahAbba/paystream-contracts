@@ -1557,3 +1557,109 @@ fn test_stop_time_caps_accrual_on_timestamp_leap() {
     // Accrual is capped at stop_time: (1100 - 1000) * 10 = 1000.
     assert_eq!(client.claimable(&id), 1000);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #290 — Integration tests: full stream lifecycle
+// ---------------------------------------------------------------------------
+
+/// create → withdraw → cancel: employee receives earned share, employer gets refund.
+#[test]
+fn test_lifecycle_create_withdraw_cancel() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+    let token = paystream_token::TokenContractClient::new(&env, &token_id);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+
+    // Create: 10 000 tokens, 10/s
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0, &0);
+    assert_eq!(client.get_stream(&id).status, StreamStatus::Active);
+
+    // Advance 200 s → 2 000 tokens earned
+    env.ledger().with_mut(|l| l.timestamp += 200);
+    let withdrawn = client.withdraw(&employee, &id);
+    assert_eq!(withdrawn, 2_000);
+
+    let employee_balance_after_withdraw = token.balance(&employee);
+
+    // Cancel: remaining 8 000 tokens go back to employer
+    let employer_balance_before_cancel = token.balance(&employer);
+    client.cancel_stream(&employer, &id);
+
+    let s = client.get_stream(&id);
+    assert_eq!(s.status, StreamStatus::Cancelled);
+    // Employer refunded the unearned portion (no additional time elapsed)
+    assert_eq!(token.balance(&employer), employer_balance_before_cancel + 8_000);
+    // Employee balance unchanged after cancel (already withdrew)
+    assert_eq!(token.balance(&employee), employee_balance_after_withdraw);
+}
+
+/// create → pause → resume → withdraw: paused time is excluded from accrual.
+#[test]
+fn test_lifecycle_pause_resume_withdraw() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+
+    // Create: 10 000 tokens, 10/s
+    let id = client.create_stream(&employer, &employee, &token_id, &10_000, &10, &0, &0, &0);
+
+    // Advance 100 s → 1 000 earned, then pause
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.pause_stream(&employer, &id);
+    assert_eq!(client.get_stream(&id).status, StreamStatus::Paused);
+
+    // Advance another 100 s while paused — should NOT accrue
+    env.ledger().with_mut(|l| l.timestamp += 100);
+    client.resume_stream(&employer, &id);
+    assert_eq!(client.get_stream(&id).status, StreamStatus::Active);
+
+    // Advance 50 s after resume → 500 more earned
+    env.ledger().with_mut(|l| l.timestamp += 50);
+
+    // Total claimable: 1 000 (before pause) + 500 (after resume) = 1 500
+    assert_eq!(client.claimable(&id), 1_500);
+    let withdrawn = client.withdraw(&employee, &id);
+    assert_eq!(withdrawn, 1_500);
+}
+
+/// create → cancel: employee receives only the earned share, employer gets the rest back.
+#[test]
+fn test_lifecycle_cancel_refund() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+    let token = paystream_token::TokenContractClient::new(&env, &token_id);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+
+    let deposit: i128 = 10_000;
+    let employer_balance_before = token.balance(&employer);
+
+    // Create: 10 000 tokens, 10/s
+    let id = client.create_stream(&employer, &employee, &token_id, &deposit, &10, &0, &0, &0);
+
+    // Advance 300 s → 3 000 earned
+    env.ledger().with_mut(|l| l.timestamp += 300);
+
+    client.cancel_stream(&employer, &id);
+    let s = client.get_stream(&id);
+    assert_eq!(s.status, StreamStatus::Cancelled);
+
+    // Employee received 3 000 (earned share)
+    assert_eq!(token.balance(&employee), 3_000);
+    // Employer refunded 7 000 (unearned remainder)
+    assert_eq!(token.balance(&employer), employer_balance_before - deposit + 7_000);
+}

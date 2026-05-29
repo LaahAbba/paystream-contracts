@@ -1,0 +1,52 @@
+name: Deploy (Blue-Green)
+
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Target slot (blue or green)"
+        required: true
+        type: choice
+        options: [blue, green]
+      image_tag:
+        description: "Docker image tag to deploy"
+        required: true
+        default: "latest"
+
+jobs:
+  deploy:
+    name: Blue-Green Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: blue-green-deploy
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          if [[ "${{ inputs.slot }}" != "blue" && "${{ inputs.slot }}" != "green" ]]; then
+            echo "Invalid slot: ${{ inputs.slot }}" && exit 1
+          fi
+
+      - name: Deploy to ${{ inputs.slot }} slot
+        env:
+          HEALTH_URL: ${{ secrets.HEALTH_URL }}
+          HEALTH_RETRIES: "12"
+          HEALTH_INTERVAL: "5"
+        run: |
+          bash scripts/deploy-blue-green.sh "${{ inputs.slot }}" "${{ inputs.image_tag }}"
+
+      - name: Record deployment
+        if: success()
+        run: |
+          echo "Deployed ${{ inputs.image_tag }} to ${{ inputs.slot }} at $(date -u)" \
+            >> deployment-log.txt
+
+      - name: Rollback instructions on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment failed. To roll back, re-run this workflow"
+          echo "::error::with the previous image tag and the same slot."
