@@ -14,6 +14,7 @@ const streamRoutes = require('./routes/streams');
 const tokenRoutes = require('./routes/tokens');
 const adminRoutes = require('./routes/admin');
 const governanceRoutes = require('./routes/governance');
+const userRoutes = require('./routes/users');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -153,6 +154,18 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Readiness probe endpoint
+const readinessService = require('./services/readinessService');
+app.get('/ready', async (req, res) => {
+  try {
+    const readiness = await readinessService.checkReadiness();
+    const statusCode = readiness.ready ? 200 : 503;
+    res.status(statusCode).json(readiness);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Auth routes (public — no authMiddleware)
 app.use('/auth', authRoutes);
 
@@ -161,6 +174,7 @@ app.use('/api/streams', authMiddleware, streamRoutes);
 app.use('/api/tokens', authMiddleware, tokenRoutes);
 app.use('/api/admin', authMiddleware, adminRoutes);
 app.use('/api/governance', authMiddleware, governanceRoutes);
+app.use('/users', authMiddleware, userRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
