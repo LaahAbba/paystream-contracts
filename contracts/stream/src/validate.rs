@@ -10,8 +10,8 @@ use crate::types::{
 /// claimable_amount for any realistic elapsed time up to ~292 years).
 pub const MAX_RATE_PER_SECOND: i128 = 1_000_000_000_i128;
 
-/// Maximum allowed stream duration (100 years in seconds).
-pub const MAX_STREAM_DURATION: u64 = 100 * 365 * 24 * 60 * 60; // ~3.15 billion seconds
+/// Maximum allowed stream duration: 10 years in seconds (#277).
+pub const MAX_STREAM_DURATION: u64 = 10 * 365 * 24 * 60 * 60; // 315_360_000 seconds
 
 /// Validate stream creation parameters.
 ///

@@ -1557,3 +1557,85 @@ fn test_stop_time_caps_accrual_on_timestamp_leap() {
     // Accrual is capped at stop_time: (1100 - 1000) * 10 = 1000.
     assert_eq!(client.claimable(&id), 1000);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #277 – Maximum stream duration validation (10 years)
+// ---------------------------------------------------------------------------
+
+const MAX_DURATION: u64 = 10 * 365 * 24 * 60 * 60; // 315_360_000 seconds
+
+/// A stream whose deposit/rate ratio equals exactly 10 years must be accepted.
+#[test]
+fn test_create_stream_at_max_duration_accepted() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+
+    // deposit / rate = MAX_DURATION exactly
+    let rate: i128 = 1;
+    let deposit: i128 = MAX_DURATION as i128;
+    let id = client.create_stream(&employer, &employee, &token_id, &deposit, &rate, &0, &0, &0);
+    assert_eq!(id, 1);
+}
+
+/// A stream whose deposit/rate ratio exceeds 10 years must be rejected with E014.
+#[test]
+#[should_panic(expected = "E014")]
+fn test_create_stream_exceeds_max_duration_rejected() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+
+    // deposit / rate = MAX_DURATION + 1
+    let rate: i128 = 1;
+    let deposit: i128 = MAX_DURATION as i128 + 1;
+    client.create_stream(&employer, &employee, &token_id, &deposit, &rate, &0, &0, &0);
+}
+
+/// A stop_time exactly 10 years from now must be accepted.
+#[test]
+fn test_create_stream_stop_time_at_max_duration_accepted() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+
+    let now = env.ledger().timestamp();
+    let stop_time = now + MAX_DURATION;
+    let deposit: i128 = MAX_DURATION as i128;
+    let id = client.create_stream(&employer, &employee, &token_id, &deposit, &1, &stop_time, &0, &0);
+    assert_eq!(id, 1);
+}
+
+/// A stop_time more than 10 years from now must be rejected with E014.
+#[test]
+#[should_panic(expected = "E014")]
+fn test_create_stream_stop_time_exceeds_max_duration_rejected() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let employer = Address::generate(&env);
+    let employee = Address::generate(&env);
+    let token_id = setup_token(&env, &employer);
+
+    client.initialize(&admin);
+    client.set_min_deposit(&admin, &0, &100);
+
+    let now = env.ledger().timestamp();
+    let stop_time = now + MAX_DURATION + 1;
+    let deposit: i128 = (MAX_DURATION + 1) as i128;
+    client.create_stream(&employer, &employee, &token_id, &deposit, &1, &stop_time, &0, &0);
+}
