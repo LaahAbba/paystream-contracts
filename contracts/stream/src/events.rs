@@ -3,8 +3,8 @@
 use soroban_sdk::{Env, Address, symbol_short};
 use crate::types::StreamStatus;
 
-pub fn stream_created(env: &Env, id: u64, employer: &Address, employee: &Address, rate: i128) {
-    env.events().publish((symbol_short!("created"), id), (employer.clone(), employee.clone(), rate));
+pub fn stream_created(env: &Env, id: u64, employer: &Address, employee: &Address, rate: i128, fee_bps: u32) {
+    env.events().publish((symbol_short!("created"), id), (employer.clone(), employee.clone(), rate, fee_bps));
 }
 
 pub fn withdrawn(env: &Env, id: u64, employee: &Address, amount: i128) {
@@ -55,6 +55,11 @@ pub fn near_exhaustion(env: &Env, id: u64, employer: &Address, threshold_days: u
 /// Emitted when an employer updates the stream rate (#122).
 pub fn rate_changed(env: &Env, id: u64, old_rate: i128, new_rate: i128) {
     env.events().publish((symbol_short!("ratechng"), id), (old_rate, new_rate));
+}
+
+/// Emitted when a delegate is set or revoked for a stream. (#287)
+pub fn delegate_set(env: &Env, id: u64, delegate: Option<Address>) {
+    env.events().publish((symbol_short!("delegate"), id), delegate);
 }
 
 /// Emitted when a governance proposal is created (#124).

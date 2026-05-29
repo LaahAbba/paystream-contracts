@@ -33,6 +33,8 @@ pub struct Stream {
     pub cliff_time: u64,
     /// Timestamp when the stream was last paused (0 if not paused). (#123 / pause fix)
     pub paused_at: u64,
+    /// Optional delegate address authorized to manage the stream. (#287)
+    pub delegate: Option<Address>,
 }
 
 /// Record of a pause/resume event for history tracking.
@@ -178,3 +180,4 @@ pub const ERR_WITHDRAW_COOLDOWN: &str = "E010: withdraw cooldown not expired";
 pub const ERR_ALREADY_PAUSED: &str = "E016: stream is already paused";
 pub const ERR_NOT_PAUSED: &str = "E017: stream is not paused";
 pub const ERR_TOKEN_NOT_ALLOWED: &str = "E018: token is not on the allowlist";
+pub const ERR_CLIFF_AFTER_STOP: &str = "E019: cliff time must be before or equal to stop time";

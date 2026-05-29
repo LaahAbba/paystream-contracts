@@ -3,7 +3,7 @@
 use soroban_sdk::Address;
 use crate::types::{
     ERR_ZERO_DEPOSIT, ERR_ZERO_RATE, ERR_BELOW_MIN_DEPOSIT, ERR_INVALID_RATE, ERR_SAME_PARTY,
-    ERR_DURATION_TOO_LONG, ERR_MAX_STREAMS_REACHED, ERR_STOP_TIME_PAST,
+    ERR_DURATION_TOO_LONG, ERR_MAX_STREAMS_REACHED, ERR_STOP_TIME_PAST, ERR_CLIFF_AFTER_STOP,
 };
 
 /// Maximum allowed rate_per_second (1 billion tokens/s — prevents overflow in
@@ -21,12 +21,14 @@ pub const MAX_STREAM_DURATION: u64 = 100 * 365 * 24 * 60 * 60; // ~3.15 billion 
 /// - E001 if `rate_per_second` ≤ 0
 /// - E008 if `rate_per_second` > MAX_RATE_PER_SECOND
 /// - if `stop_time` is in the past (when non-zero)
+/// - if `cliff_time` > `stop_time` (when both are non-zero)
 /// - if `employer` == `employee`
 pub fn validate_create_stream(
     deposit: i128,
     min_deposit: i128,
     rate_per_second: i128,
     stop_time: u64,
+    cliff_time: u64,
     now: u64,
     employer: &Address,
     employee: &Address,
@@ -45,6 +47,12 @@ pub fn validate_create_stream(
         let stop_time_duration = stop_time.saturating_sub(now);
         assert!(stop_time_duration <= MAX_STREAM_DURATION, "{}", ERR_DURATION_TOO_LONG);
     }
+    
+    // Cliff time validation
+    if cliff_time > 0 && stop_time > 0 {
+        assert!(cliff_time <= stop_time, "{}", ERR_CLIFF_AFTER_STOP);
+    }
+    
     assert!(employer != employee, "{}", ERR_SAME_PARTY);
 }
 
