@@ -45,7 +45,8 @@ const unsignedXdr = await client.createStream(
   1_000_000n,   // deposit (stroops)
   100n,          // rate_per_second
   0n,            // stop_time (0 = indefinite)
-  0n             // cooldown_period
+  0n,            // cooldown_period
+  0n             // cliff_time
 );
 const signedXdr = await freighterSignTransaction(unsignedXdr, Networks.TESTNET);
 const txHash = await client.submitTransaction(signedXdr);
@@ -86,6 +87,7 @@ handle.unsubscribe();
 | `createStreamsBatch(employer, params[])` | Create multiple streams atomically |
 | `withdraw(employee, id)` | Withdraw all claimable earnings |
 | `topUp(employer, id, amount)` | Add funds to active stream |
+| `updateRate(employer, id, rate)` | Update rate of active stream |
 | `pauseStream(employer, id)` | Pause accrual |
 | `resumeStream(employer, id)` | Resume accrual |
 | `cancelStream(employer, id)` | Cancel, pay earned share, refund remainder |

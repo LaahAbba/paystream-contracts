@@ -44,6 +44,12 @@ deploy-local:
 deploy-testnet:
 	./scripts/deploy-testnet.sh
 
+## install-hooks: Install git pre-commit hooks
+install-hooks:
+	cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
+	@echo "pre-commit hook installed"
+
 ## help: Show this help message
 help:
 	@grep -E '^## ' Makefile | sed 's/^## //' | column -t -s ':'

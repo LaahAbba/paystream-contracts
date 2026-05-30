@@ -18,6 +18,8 @@ export interface Stream {
   cooldownPeriod: bigint;
   status: StreamStatus;
   locked: boolean;
+  cliffTime: bigint;
+  pausedAt: bigint;
 }
 
 /** Parameters for a single stream in a batch create call. */
@@ -27,6 +29,7 @@ export interface StreamParams {
   deposit: bigint;
   ratePerSecond: bigint;
   stopTime: bigint;
+  cliffTime: bigint;
 }
 
 /** Options passed to PayStreamClient constructor. */

@@ -181,6 +181,28 @@ class StellarService {
   }
 
   /**
+   * Get SEP-41 token metadata (name, symbol, decimals) with 1-hour in-memory cache
+   */
+  async getTokenMetadata(contractId) {
+    if (!this._metadataCache) this._metadataCache = new Map();
+
+    const cached = this._metadataCache.get(contractId);
+    if (cached && Date.now() - cached.ts < 3600_000) {
+      return cached.data;
+    }
+
+    const [name, symbol, decimals] = await Promise.all([
+      this.callContractMethod({ contractId, functionName: 'name', args: [] }),
+      this.callContractMethod({ contractId, functionName: 'symbol', args: [] }),
+      this.callContractMethod({ contractId, functionName: 'decimals', args: [] }),
+    ]);
+
+    const data = { name, symbol, decimals };
+    this._metadataCache.set(contractId, { data, ts: Date.now() });
+    return data;
+  }
+
+  /**
    * Get token balance for an account
    */
   async getTokenBalance(tokenContractId, accountId) {

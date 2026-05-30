@@ -1,10 +1,10 @@
 # Staging Environment
 
-PayStream maintains a persistent staging deployment on Stellar testnet for integration testing and demos.
+PayStream maintains a persistent staging deployment on Stellar testnet for integration testing and demos. Staging uses independent testnet contracts and can be configured with separate staging database and Redis instances to mirror production while isolating pre-release traffic.
 
 ## Contract IDs
 
-Staging contracts are redeployed automatically on every merge to `main`. The latest IDs appear in the [Deploy Staging workflow summary](../../actions/workflows/staging.yml).
+Staging contracts are redeployed automatically on every merge to `develop`. The latest IDs appear in the [Deploy Staging workflow summary](../../actions/workflows/staging.yml).
 
 | Contract | Network  |
 |----------|----------|
@@ -12,6 +12,8 @@ Staging contracts are redeployed automatically on every merge to `main`. The lat
 | Stream   | Testnet  |
 
 ## Required Repository Secrets
+
+Staging access is restricted through the GitHub `staging` environment and team-level secret permissions.
 
 Configure these in **Settings → Secrets and variables → Actions** under the `staging` environment:
 

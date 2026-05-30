@@ -62,4 +62,8 @@ function createWalletRateLimiter() {
   };
 }
 
-module.exports = { createIpRateLimiter, createWalletRateLimiter };
+async function closeRedis() {
+  await redisClient.quit();
+}
+
+module.exports = { createIpRateLimiter, createWalletRateLimiter, closeRedis };

@@ -35,6 +35,31 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_events_stream_id   ON stream_events (stream_id);
     CREATE INDEX IF NOT EXISTS idx_events_event_type  ON stream_events (event_type);
     CREATE INDEX IF NOT EXISTS idx_events_ledger      ON stream_events (ledger_sequence);
+
+    -- Webhook registrations (#249)
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id          UUID PRIMARY KEY,
+      url         TEXT NOT NULL,
+      address     TEXT NOT NULL,
+      secret      TEXT NOT NULL,
+      events      TEXT[] NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_webhooks_address ON webhooks (address);
+
+    -- Idempotency keys (#267)
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      id              BIGSERIAL PRIMARY KEY,
+      key             TEXT        NOT NULL,
+      address         TEXT        NOT NULL,
+      request_body    JSONB       NOT NULL,
+      response_status INTEGER     NOT NULL,
+      response_body   JSONB       NOT NULL,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (key, address)
+    );
+    CREATE INDEX IF NOT EXISTS idx_idempotency_keys_key ON idempotency_keys (key, address);
+    CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_at ON idempotency_keys (created_at);
   `);
   console.log("Migration complete.");
   await pool.end();

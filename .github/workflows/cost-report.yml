@@ -1,0 +1,95 @@
+name: Weekly Cost Report
+
+on:
+  schedule:
+    # Every Monday at 09:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  cost-report:
+    name: Generate and Email Cost Report
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Fetch cost and usage report
+        id: cost
+        run: |
+          START=$(date -d "last monday -7 days" +%Y-%m-%d 2>/dev/null || date -v-14d +%Y-%m-%d)
+          END=$(date -d "last monday" +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d)
+          echo "period=${START} to ${END}" >> "$GITHUB_OUTPUT"
+
+          aws ce get-cost-and-usage \
+            --time-period Start="$START",End="$END" \
+            --granularity MONTHLY \
+            --metrics "UnblendedCost" \
+            --group-by Type=DIMENSION,Key=SERVICE \
+            > cost-breakdown.json
+
+          TOTAL=$(jq -r '.ResultsByTime[0].Total.UnblendedCost.Amount' cost-breakdown.json)
+          echo "total=${TOTAL}" >> "$GITHUB_OUTPUT"
+
+      - name: Format cost report
+        id: report
+        run: |
+          python3 - <<'EOF'
+          import json, os
+
+          with open("cost-breakdown.json") as f:
+              data = json.load(f)
+
+          results = data["ResultsByTime"][0]["Groups"]
+          rows = sorted(
+              [(g["Keys"][0], float(g["Metrics"]["UnblendedCost"]["Amount"])) for g in results],
+              key=lambda x: x[1],
+              reverse=True,
+          )
+
+          lines = ["Service | Cost (USD)", "--- | ---"]
+          for service, cost in rows:
+              if cost >= 0.01:
+                  lines.append(f"{service} | ${cost:.2f}")
+
+          total = sum(c for _, c in rows)
+          lines.append(f"**Total** | **${total:.2f}**")
+
+          report = "\n".join(lines)
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"COST_TABLE<<EOF\n{report}\nEOF\n")
+          EOF
+
+      - name: Send cost report email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "PayStream Weekly Cost Report — ${{ steps.cost.outputs.period }}"
+          to: ${{ secrets.COST_REPORT_RECIPIENTS }}
+          from: "PayStream CI <noreply@paystream.io>"
+          content_type: text/plain
+          body: |
+            PayStream AWS Cost Report
+            Period: ${{ steps.cost.outputs.period }}
+            Total:  ${{ steps.cost.outputs.total }} USD
+
+            Cost breakdown by service:
+
+            ${{ env.COST_TABLE }}
+
+            Budget thresholds are configured in infra/cost-monitoring/budgets.tf.
+            AWS Budget alerts fire at 80% and 100% of each environment's monthly limit.
+
+            View full details: https://console.aws.amazon.com/cost-management/home#/dashboard

@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, param, query, validationResult } = require('express-validator');
 const stellarService = require('../services/stellarService');
+const cache = require('../services/cacheService');
 const router = express.Router();
 
 /**
@@ -83,12 +84,25 @@ const router = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 stream_id:
  *                   type: integer
+ *                   example: 101
  *                 transaction_hash:
  *                   type: string
+ *                   example: "a1b2c3d4..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       422:
+ *         description: Idempotency error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
-router.post('/create', [
+router.post('/create', idempotencyMiddleware, [
   body('employer').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid employer address'),
   body('employee').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid employee address'),
   body('token_address').isString().matches(/^C[A-Z0-9]{62}$/).withMessage('Invalid token contract address'),
@@ -174,6 +188,27 @@ router.post('/create', [
  *     responses:
  *       200:
  *         description: Stream information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 stream:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: 'integer', example: 101 }
+ *                     employer: { $ref: '#/components/schemas/Address' }
+ *                     employee: { $ref: '#/components/schemas/Address' }
+ *                     token: { $ref: '#/components/schemas/Address' }
+ *                     deposit: { $ref: '#/components/schemas/Amount' }
+ *                     withdrawn: { $ref: '#/components/schemas/Amount' }
+ *                     rate_per_second: { $ref: '#/components/schemas/Rate' }
+ *                     status: { $ref: '#/components/schemas/StreamStatus' }
+ *       404:
+ *         description: Stream not found
  */
 router.get('/:stream_id', [
   param('stream_id').isInt({ min: 1 }).withMessage('Invalid stream ID'),
@@ -189,12 +224,23 @@ router.get('/:stream_id', [
 
     const { stream_id } = req.params;
 
+    const cached = await cache.getStream(stream_id);
+    if (cached) {
+      res.set('Cache-Control', 'public, max-age=10');
+      res.set('X-Cache', 'HIT');
+      return res.json({ success: true, stream: cached });
+    }
+
     const result = await stellarService.callContractMethod({
       contractId: stellarService.streamContractId,
       functionName: 'get_stream',
       args: [BigInt(stream_id)]
     });
 
+    await cache.setStream(stream_id, result);
+
+    res.set('Cache-Control', 'public, max-age=10');
+    res.set('X-Cache', 'MISS');
     res.json({
       success: true,
       stream: result,
@@ -305,6 +351,25 @@ router.get('/:stream_id/claimable', [
  *             properties:
  *               employee:
  *                 $ref: '#/components/schemas/Address'
+ *     responses:
+ *       200:
+ *         description: Withdrawal successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 amount_withdrawn:
+ *                   $ref: '#/components/schemas/Amount'
+ *                   example: "5000000"
+ *                 transaction_hash:
+ *                   type: string
+ *                   example: "b2c3d4e5..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
  */
 router.post('/:stream_id/withdraw', [
   param('stream_id').isInt({ min: 1 }).withMessage('Invalid stream ID'),
@@ -338,6 +403,8 @@ router.post('/:stream_id/withdraw', [
       ]
     });
 
+    await cache.invalidateStream(stream_id);
+
     res.json({
       success: true,
       amount_withdrawn: result.result.toString(),
@@ -347,6 +414,20 @@ router.post('/:stream_id/withdraw', [
   } catch (error) {
     next(error);
   }
+});
+
+/**
+ * @swagger
+ * /api/streams/cache-metrics:
+ *   get:
+ *     summary: Cache hit/miss metrics
+ *     tags: [Streams]
+ *     responses:
+ *       200:
+ *         description: Cache metrics
+ */
+router.get('/cache-metrics', (req, res) => {
+  res.json({ success: true, cache: cache.getMetrics() });
 });
 
 module.exports = router;

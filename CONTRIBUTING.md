@@ -16,6 +16,7 @@ Thank you for contributing to PayStream — a Soroban smart contract system for 
 - [Coding Standards](#coding-standards)
 - [Commit Conventions](#commit-conventions)
 - [Secret Scanning](#secret-scanning)
+- [Software Bill of Materials (SBOM)](#software-bill-of-materials-sbom)
 - [Pull Request Process](#pull-request-process)
 - [Testing Requirements](#testing-requirements)
 - [Code Review Expectations](#code-review-expectations)
@@ -254,11 +255,10 @@ PayStream uses [gitleaks](https://github.com/gitleaks/gitleaks) to prevent accid
 
 ### Install the pre-commit hook (recommended)
 
-The hook scans only your staged files before each commit, catching leaks before they ever leave your machine.
+The hook runs `cargo fmt --check`, `cargo clippy`, ESLint on staged JS/TS files, and a gitleaks secret scan before every commit. Install it with:
 
 ```bash
-# One-time setup
-cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
+make install-hooks
 
 # Install gitleaks (pick one)
 brew install gitleaks                          # macOS
@@ -277,6 +277,44 @@ gitleaks detect --config .gitleaks.toml --redact
 ### False positives
 
 Add an allowlist entry to `.gitleaks.toml`. See the comments in that file for examples. Do **not** use `--no-git` or disable the hook to silence a warning — investigate first.
+
+---
+
+## Software Bill of Materials (SBOM)
+
+PayStream generates an SBOM for every release to support supply chain security and compliance requirements.
+
+### What is generated
+
+On each GitHub release, the CI pipeline (`sbom.yml`) uses [Syft](https://github.com/anchore/syft) to produce two SBOM files and attaches them to the release assets:
+
+| File | Format |
+|---|---|
+| `paystream-sbom.cyclonedx.json` | CycloneDX JSON |
+| `paystream-sbom.spdx.json` | SPDX JSON |
+
+Both files enumerate every dependency — Rust crates (from `Cargo.lock`), Node packages (from `package-lock.json`), and container layers.
+
+### Vulnerability scanning
+
+After SBOM generation, [Grype](https://github.com/anchore/grype) scans the CycloneDX SBOM against the NVD, GitHub Advisories, and other vulnerability databases. Results are uploaded to the repository's GitHub Security tab as a SARIF report.
+
+Builds are **not** failed on discovery — vulnerabilities are tracked and triaged via the Security tab. Critical/high findings should be addressed before the next release.
+
+### Viewing the SBOM
+
+Download from any GitHub release page → Assets → `paystream-sbom.cyclonedx.json`. To inspect locally:
+
+```bash
+# Install syft
+curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+# Generate an SBOM locally (CycloneDX)
+syft . -o cyclonedx-json=paystream-sbom.cyclonedx.json
+
+# Scan for vulnerabilities
+grype sbom:paystream-sbom.cyclonedx.json
+```
 
 ---
 

@@ -89,6 +89,11 @@ Optionally. The admin can configure a fee in basis points (1 bps = 0.01%) up to 
 
 ### Q12: What do the error codes mean?
 
+For a comprehensive list with causes and resolution steps for every error, see the
+**[Error Code Reference](error-codes.md)**.
+
+Quick summary of the most common codes:
+
 | Code | Constant | Meaning |
 |---|---|---|
 | E001 | `ERR_ZERO_RATE` | `rate_per_second` must be > 0 |
@@ -100,10 +105,16 @@ Optionally. The admin can configure a fee in basis points (1 bps = 0.01%) up to 
 | E007 | `ERR_BELOW_MIN_DEPOSIT` | Deposit is below the configured minimum |
 | E008 | `ERR_INVALID_RATE` | `rate_per_second` exceeds the maximum of 1 000 000 000 |
 | E009 | `ERR_BAD_NONCE` | Admin nonce mismatch — replay protection triggered |
-| E010 | `ERR_WITHDRAW_COOLDOWN` | Withdrawal attempted before cooldown period expired |
+| E010 | `ERR_SAME_PARTY` / `ERR_WITHDRAW_COOLDOWN` | Employer = employee, or cooldown not expired |
 | E011 | `ERR_FEE_TOO_HIGH` | `fee_bps` exceeds the maximum of 100 |
 | E012 | `ERR_INVALID_TOKEN` | Token address is not a valid SEP-41 contract |
 | E013 | `ERR_UNAUTHORIZED_TRANSFER` | Caller is not the pending employer for this stream |
+| E014 | `ERR_DURATION_TOO_LONG` | Stream duration exceeds 100 years |
+| E015 | `ERR_MAX_STREAMS_REACHED` | Employer has hit the stream limit |
+| E016 | `ERR_STOP_TIME_PAST` / `ERR_ALREADY_PAUSED` | `stop_time` in the past, or stream already paused |
+| E017 | `ERR_NOT_PAUSED` | `resume_stream` called on a non-paused stream |
+| E018 | `ERR_TOKEN_NOT_ALLOWED` | Token is not on the admin allowlist |
+| E019 | `ERR_CLIFF_AFTER_STOP` | `cliff_time` is later than `stop_time` |
 
 ---
 

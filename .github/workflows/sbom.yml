@@ -1,0 +1,80 @@
+name: SBOM Generation
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sbom:
+    name: Generate & Scan SBOM
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-sbom-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-sbom-
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Build contracts
+        run: stellar contract build
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: paystream-sbom.cyclonedx.json
+          artifact-name: paystream-sbom.cyclonedx.json
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: paystream-sbom.spdx.json
+          artifact-name: paystream-sbom.spdx.json
+
+      - name: Scan SBOM for known vulnerabilities
+        uses: anchore/scan-action@v4
+        id: grype
+        with:
+          sbom: paystream-sbom.cyclonedx.json
+          fail-build: false
+          severity-cutoff: high
+          output-format: sarif
+
+      - name: Upload vulnerability scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+
+      - name: Attach SBOM to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            paystream-sbom.cyclonedx.json
+            paystream-sbom.spdx.json

@@ -20,5 +20,7 @@ export function scValToStream(val: xdr.ScVal): Stream {
     cooldownPeriod: BigInt(native["cooldown_period"] as string | number),
     status: native["status"] as StreamStatus,
     locked: native["locked"] as boolean,
+    cliffTime: BigInt(native["cliff_time"] as string | number),
+    pausedAt: BigInt(native["paused_at"] as string | number),
   };
 }

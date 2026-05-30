@@ -21,6 +21,23 @@ describe('probe endpoints', () => {
     expect(response.body.started_at).toEqual(expect.any(String));
   });
 
+  it('returns the provided X-Correlation-ID header in responses', async () => {
+    const response = await request(app)
+      .get('/health')
+      .set('X-Correlation-ID', 'test-correlation-id');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['x-correlation-id']).toBe('test-correlation-id');
+  });
+
+  it('generates an X-Correlation-ID header when none is provided', async () => {
+    const response = await request(app).get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['x-correlation-id']).toEqual(expect.any(String));
+    expect(response.headers['x-correlation-id'].length).toBeGreaterThan(0);
+  });
+
   it('returns 200 when readiness dependencies are healthy', async () => {
     readinessService.checkReadiness.mockResolvedValue({
       ready: true,
@@ -59,5 +76,34 @@ describe('probe endpoints', () => {
     expect(response.status).toBe(503);
     expect(response.body.status).toBe('not_ready');
     expect(response.body.checks[0].name).toBe('sorobanRpc');
+  });
+});
+
+describe('API versioning (#253)', () => {
+  it('includes X-API-Version header on all responses', async () => {
+    const response = await request(app).get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['x-api-version']).toBe('v1');
+  });
+
+  it('includes deprecation headers on legacy unversioned routes', async () => {
+    const response = await request(app)
+      .get('/api/streams/count')
+      .set('X-API-Key', 'test-key');
+
+    expect(response.headers['x-api-version']).toBe('v1');
+    expect(response.headers['x-api-deprecated']).toBe('true');
+    expect(response.headers['x-api-deprecation-notice']).toContain('Migrate to /v1/');
+  });
+
+  it('does not include deprecation headers on v1 routes', async () => {
+    const response = await request(app)
+      .get('/v1/api/streams/count')
+      .set('X-API-Key', 'test-key');
+
+    expect(response.headers['x-api-version']).toBe('v1');
+    expect(response.headers['x-api-deprecated']).toBeUndefined();
+    expect(response.headers['x-api-deprecation-notice']).toBeUndefined();
   });
 });

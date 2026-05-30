@@ -55,6 +55,7 @@ pub const ERR_NOT_ADMIN: &str = "not the admin";
 pub const ERR_NOT_PENDING_ADMIN: &str = "not the pending admin";
 pub const ERR_NOT_EMPLOYER: &str = "not the employer";
 pub const ERR_NOT_EMPLOYEE: &str = "not the employee";
+pub const ERR_NOT_DELEGATE: &str = "not the delegate";
 
 // ---------------------------------------------------------------------------
 // Admin Role Checks
@@ -254,6 +255,7 @@ mod tests {
             locked: false,
             cliff_time: 0,
             paused_at: 0,
+            delegate: None,
         }
     }
 
@@ -464,5 +466,31 @@ mod tests {
         assert!(is_employee(&employee, &stream));
         assert!(!is_employee(&employer, &stream));
         assert!(!is_employee(&other, &stream));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Delegate Role Checks
+// ---------------------------------------------------------------------------
+
+/// Verify that the caller is the delegate of the specified stream.
+///
+/// # Panics
+/// Panics with "not the delegate" if the caller is not the delegate.
+pub fn require_delegate(caller: &Address, stream: &Stream) {
+    assert!(is_delegate(caller, stream), "{}", ERR_NOT_DELEGATE);
+}
+
+/// Check if an address is the delegate of a specific stream.
+///
+/// This is a non-panicking version useful for conditional logic.
+///
+/// # Returns
+/// `true` if the address matches the stream's delegate, `false` otherwise.
+pub fn is_delegate(address: &Address, stream: &Stream) -> bool {
+    if let Some(delegate) = &stream.delegate {
+        *address == *delegate
+    } else {
+        false
     }
 }

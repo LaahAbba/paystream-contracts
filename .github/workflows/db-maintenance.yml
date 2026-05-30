@@ -1,0 +1,71 @@
+name: Database Maintenance
+
+on:
+  schedule:
+    - cron: '0 2 * * *'    # Daily at 02:00 UTC for backups
+    - cron: '0 4 1 * *'    # Monthly at 04:00 UTC on the 1st for restore drills
+  workflow_dispatch:        # Allow manual triggers
+
+jobs:
+  backup:
+    name: Daily Database Backup
+    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL Client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.BACKUP_AWS_REGION || 'us-east-1' }}
+
+      - name: Run Backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+        run: |
+          chmod +x infra/backup/backup.sh
+          ./infra/backup/backup.sh
+
+      - name: Alert on Failure
+        if: failure()
+        run: |
+          echo "::error::Database backup failed!"
+          # Add Slack/Discord notification here if configured
+          # curl -X POST -H 'Content-type: application/json' --data '{"text":"❌ Database backup failed!"}' ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  restore-drill:
+    name: Monthly Restore Drill
+    if: github.event.schedule == '0 4 1 * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL Client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.BACKUP_AWS_REGION || 'us-east-1' }}
+
+      - name: Run Restore Drill
+        env:
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+          TEMP_RESTORE_DB_URL: ${{ secrets.TEMP_RESTORE_DB_URL }}
+        run: |
+          chmod +x infra/backup/restore-drill.sh
+          ./infra/backup/restore-drill.sh
+
+      - name: Alert on Failure
+        if: failure()
+        run: |
+          echo "::error::Database restore drill failed!"
+          # curl -X POST -H 'Content-type: application/json' --data '{"text":"🚨 Database restore drill failed!"}' ${{ secrets.SLACK_WEBHOOK_URL }}

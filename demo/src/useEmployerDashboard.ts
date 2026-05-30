@@ -33,6 +33,7 @@ export function useEmployerDashboard(seedPublicKey?: string | null) {
   const [error, setError] = useState<string | null>(null);
   const [scanned, setScanned] = useState(0);
   const [chainTotal, setChainTotal] = useState(0);
+  const [lastTxHashes, setLastTxHashes] = useState<Record<string, string>>({});
 
   // ── Connect wallet ────────────────────────────────────────────────────────
   const connect = useCallback(async () => {
@@ -110,7 +111,8 @@ export function useEmployerDashboard(seedPublicKey?: string | null) {
         else xdrStr = await client.cancelStream(publicKey, streamId);
 
         const signed = await freighterSignTransaction(xdrStr, CONFIG.networkPassphrase);
-        await client.submitTransaction(signed);
+        const txHash = await client.submitTransaction(signed);
+        setLastTxHashes((prev) => ({ ...prev, [streamId.toString()]: txHash }));
 
         // Refresh only the affected stream
         const updated = await client.getStream(streamId);
@@ -154,7 +156,8 @@ export function useEmployerDashboard(seedPublicKey?: string | null) {
       try {
         const xdrStr = await client.topUp(publicKey, streamId, amountStroops);
         const signed = await freighterSignTransaction(xdrStr, CONFIG.networkPassphrase);
-        await client.submitTransaction(signed);
+        const txHash = await client.submitTransaction(signed);
+        setLastTxHashes((prev) => ({ ...prev, [streamId.toString()]: txHash }));
 
         // Refresh only the affected stream
         const updated = await client.getStream(streamId);
@@ -178,6 +181,7 @@ export function useEmployerDashboard(seedPublicKey?: string | null) {
     error,
     scanned,
     chainTotal,
+    lastTxHashes,
     connect,
     refresh,
     handleAction,

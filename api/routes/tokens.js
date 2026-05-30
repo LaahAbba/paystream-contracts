@@ -20,8 +20,12 @@ const router = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 total_supply:
  *                   $ref: '#/components/schemas/Amount'
+ *                   example: "1000000000000"
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/total-supply', async (req, res, next) => {
   try {
@@ -64,8 +68,14 @@ router.get('/total-supply', async (req, res, next) => {
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 balance:
  *                   $ref: '#/components/schemas/Amount'
+ *                   example: "5000000"
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/balance/:address', [
   param('address').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid address'),
@@ -137,8 +147,14 @@ router.get('/balance/:address', [
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "g7h8i9j0..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/transfer', [
   body('from').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid from address'),
@@ -217,8 +233,14 @@ router.post('/transfer', [
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "h8i9j0k1..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/mint', [
   body('admin').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid admin address'),
@@ -259,6 +281,72 @@ router.post('/mint', [
     });
 
   } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @swagger
+ * /api/tokens/{address}:
+ *   get:
+ *     summary: Get SEP-41 token metadata
+ *     description: Returns name, symbol, and decimals for any SEP-41 token. Cached for 1 hour.
+ *     tags: [Tokens]
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Token contract address (C...)
+ *     responses:
+ *       200:
+ *         description: Token metadata
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 address:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 symbol:
+ *                   type: string
+ *                 decimals:
+ *                   type: integer
+ *       404:
+ *         description: Token not found or invalid address
+ */
+router.get('/:address', [
+  param('address').isString().matches(/^C[A-Z0-9]{62}$/).withMessage('Invalid contract address'),
+], async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(404).json({ error: 'Invalid token address' });
+    }
+
+    const { address } = req.params;
+
+    if (!stellarService.validateContractId(address)) {
+      return res.status(404).json({ error: 'Invalid token address' });
+    }
+
+    const metadata = await stellarService.getTokenMetadata(address);
+
+    res.json({
+      success: true,
+      address,
+      ...metadata,
+    });
+
+  } catch (error) {
+    if (error.message.includes('not found') || error.message.includes('does not exist')) {
+      return res.status(404).json({ error: 'Token not found' });
+    }
     next(error);
   }
 });

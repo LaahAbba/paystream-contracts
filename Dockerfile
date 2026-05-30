@@ -14,3 +14,7 @@ RUN stellar contract build
 # ── test stage ────────────────────────────────────────────────────────────────
 FROM builder AS test
 CMD ["cargo", "test"]
+
+# ── output stage: WASM artifacts only (~scratch-sized) ───────────────────────
+FROM scratch AS output
+COPY --from=builder /app/target/wasm32-unknown-unknown/release/*.wasm /contracts/
