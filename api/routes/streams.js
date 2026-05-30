@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, param, query, validationResult } = require('express-validator');
 const stellarService = require('../services/stellarService');
+const cache = require('../services/cacheService');
 const router = express.Router();
 
 /**
@@ -189,12 +190,23 @@ router.get('/:stream_id', [
 
     const { stream_id } = req.params;
 
+    const cached = await cache.getStream(stream_id);
+    if (cached) {
+      res.set('Cache-Control', 'public, max-age=10');
+      res.set('X-Cache', 'HIT');
+      return res.json({ success: true, stream: cached });
+    }
+
     const result = await stellarService.callContractMethod({
       contractId: stellarService.streamContractId,
       functionName: 'get_stream',
       args: [BigInt(stream_id)]
     });
 
+    await cache.setStream(stream_id, result);
+
+    res.set('Cache-Control', 'public, max-age=10');
+    res.set('X-Cache', 'MISS');
     res.json({
       success: true,
       stream: result,
@@ -338,6 +350,8 @@ router.post('/:stream_id/withdraw', [
       ]
     });
 
+    await cache.invalidateStream(stream_id);
+
     res.json({
       success: true,
       amount_withdrawn: result.result.toString(),
@@ -347,6 +361,20 @@ router.post('/:stream_id/withdraw', [
   } catch (error) {
     next(error);
   }
+});
+
+/**
+ * @swagger
+ * /api/streams/cache-metrics:
+ *   get:
+ *     summary: Cache hit/miss metrics
+ *     tags: [Streams]
+ *     responses:
+ *       200:
+ *         description: Cache metrics
+ */
+router.get('/cache-metrics', (req, res) => {
+  res.json({ success: true, cache: cache.getMetrics() });
 });
 
 module.exports = router;
