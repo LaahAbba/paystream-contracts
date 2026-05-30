@@ -465,7 +465,64 @@ impl StreamContract {
     }
 
     pub fn get_stream(env: Env, stream_id: u64) -> Stream {
-        load_stream(&env, stream_id).expect("stream not found")
+        let mut stream = load_stream(&env, stream_id).expect("stream not found");
+        // Auto-mark as Exhausted when stop_time has passed and deposit is fully streamed (#280).
+        if stream.status == StreamStatus::Active
+            && stream.stop_time > 0
+            && env.ledger().timestamp() >= stream.stop_time
+        {
+            let now = env.ledger().timestamp();
+            let claimable = claimable_amount(&stream, now);
+            // All remaining deposit has been streamed to the employee
+            if claimable == 0 && stream.withdrawn >= stream.deposit {
+                stream.status = StreamStatus::Exhausted;
+                save_stream(&env, &stream);
+            } else if stream.stop_time > 0 && now >= stream.stop_time {
+                // stop_time passed: crystallise earnings up to stop_time
+                let earned_at_stop = claimable_amount(&stream, stream.stop_time);
+                let total_streamed = stream.withdrawn.checked_add(earned_at_stop).unwrap_or(stream.deposit);
+                if total_streamed >= stream.deposit {
+                    stream.status = StreamStatus::Exhausted;
+                    save_stream(&env, &stream);
+                }
+            }
+        }
+        stream
+    }
+
+    /// Reclaim unstreamed deposit after a stream's stop_time has passed (#280).
+    ///
+    /// The employee's earned share (up to stop_time) is transferred to the employee;
+    /// the remainder is refunded to the employer. Stream is marked Exhausted.
+    pub fn reclaim_expired(env: Env, employer: Address, stream_id: u64) {
+        employer.require_auth();
+        let mut stream = require_employer_by_id(&env, &employer, stream_id);
+        assert!(
+            stream.status == StreamStatus::Active || stream.status == StreamStatus::Paused,
+            "stream already ended"
+        );
+        let now = env.ledger().timestamp();
+        assert!(
+            stream.stop_time > 0 && now >= stream.stop_time,
+            "stream has not expired"
+        );
+
+        let earned = claimable_amount(&stream, now);
+        let token_client = token::Client::new(&env, &stream.token);
+
+        if earned > 0 {
+            token_client.transfer(&env.current_contract_address(), &stream.employee, &earned);
+            stream.withdrawn = stream.withdrawn.checked_add(earned).expect("withdrawn overflow");
+        }
+
+        let refund = stream.deposit.checked_sub(stream.withdrawn).unwrap_or(0).max(0);
+        if refund > 0 {
+            token_client.transfer(&env.current_contract_address(), &employer, &refund);
+        }
+
+        stream.status = StreamStatus::Exhausted;
+        save_stream(&env, &stream);
+        events::stream_cancelled(&env, stream_id, &employer, &stream.employee, refund, earned);
     }
 
     pub fn claimable(env: Env, stream_id: u64) -> i128 {
