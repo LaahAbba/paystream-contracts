@@ -32,8 +32,14 @@ const router = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "d4e5f6a1..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/initialize', [
   body('admin').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid admin address'),
@@ -106,8 +112,14 @@ router.post('/initialize', [
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "e5f6a1b2..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/pause-contract', [
   body('admin').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid admin address'),
@@ -187,8 +199,14 @@ router.post('/pause-contract', [
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "f6a1b2c3..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/set-min-deposit', [
   body('admin').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid admin address'),

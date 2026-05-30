@@ -5,18 +5,22 @@ require("dotenv").config();
 const { Horizon } = require("@stellar/stellar-sdk");
 const axios = require("axios");
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
+const { Pool } = require("pg");
 
 const {
   HORIZON_URL = "https://horizon-testnet.stellar.org",
   CONTRACT_ID,
+  DATABASE_URL,
   WEBHOOK_URL,
+  WEBHOOK_SECRET = "legacy-secret",
   SMTP_HOST,
   SMTP_PORT = "587",
   SMTP_USER,
   SMTP_PASS,
   EMAIL_FROM = "notifications@paystream.example",
   POLL_INTERVAL_MS = "5000",
-  WATCH_EVENTS = "created,withdraw,status",
+  WATCH_EVENTS = "created,withdraw,status,paused,cancelled",
 } = process.env;
 
 if (!CONTRACT_ID) {
@@ -26,6 +30,7 @@ if (!CONTRACT_ID) {
 
 const watchSet = new Set(WATCH_EVENTS.split(",").map((e) => e.trim()));
 const server = new Horizon.Server(HORIZON_URL);
+const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL }) : null;
 
 // Optional SMTP transport
 const mailer =
@@ -37,13 +42,66 @@ const mailer =
       })
     : null;
 
-/** Send a webhook POST if WEBHOOK_URL is configured. */
-async function sendWebhook(payload) {
-  if (!WEBHOOK_URL) return;
+/** Sign payload with HMAC SHA-256 (#249) */
+function signPayload(payload, secret) {
+  const hmac = crypto.createHmac("sha256", secret);
+  hmac.update(JSON.stringify(payload));
+  return hmac.digest("hex");
+}
+
+/** Dispatch webhook with exponential backoff retry (#249) */
+async function dispatchWebhook(url, payload, secret, attempt = 1) {
+  const MAX_ATTEMPTS = 5;
+  const signature = signPayload(payload, secret);
+
   try {
-    await axios.post(WEBHOOK_URL, payload, { timeout: 5000 });
+    await axios.post(url, payload, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-PayStream-Signature": signature,
+      },
+      timeout: 5000,
+    });
+    console.log(`[Webhook] Delivered to ${url}`);
   } catch (err) {
-    console.error("Webhook delivery failed:", err.message);
+    console.error(`[Webhook] Delivery failed to ${url} (Attempt ${attempt}/${MAX_ATTEMPTS}): ${err.message}`);
+    if (attempt < MAX_ATTEMPTS) {
+      const delay = Math.pow(2, attempt) * 1000;
+      setTimeout(() => dispatchWebhook(url, payload, secret, attempt + 1), delay);
+    }
+  }
+}
+
+/** Send webhooks to all registered listeners (#249) */
+async function notifyWebhooks(eventType, payload, addresses) {
+  // 1. Legacy global webhook
+  if (WEBHOOK_URL) {
+    dispatchWebhook(WEBHOOK_URL, payload, WEBHOOK_SECRET);
+  }
+
+  // 2. Registered webhooks
+  if (!pool) return;
+
+  try {
+    const eventMapping = {
+      created: "stream_created",
+      withdraw: "withdrawn",
+      paused: "paused",
+      cancelled: "cancelled",
+    };
+    const mappedEvent = eventMapping[eventType];
+    if (!mappedEvent) return;
+
+    const { rows } = await pool.query(
+      "SELECT url, secret FROM webhooks WHERE address = ANY($1) AND $2 = ANY(events)",
+      [addresses, mappedEvent]
+    );
+
+    for (const row of rows) {
+      dispatchWebhook(row.url, payload, row.secret);
+    }
+  } catch (err) {
+    console.error("[Webhook] DB fetch failed:", err.message);
   }
 }
 
@@ -83,6 +141,31 @@ function buildNotification(event) {
         subject: `PayStream: Withdrawal from stream #${streamId}`,
         text: `Employee ${employee} withdrew ${amount} tokens from stream #${streamId}.`,
         notifyAddresses: [employee],
+      };
+    }
+    case "paused": {
+      const [employer, employee, paused_at] = data;
+      return {
+        ...base,
+        employer,
+        employee,
+        paused_at,
+        subject: `PayStream: Stream #${streamId} paused`,
+        text: `Stream #${streamId} was paused by ${employer} at ${paused_at}.`,
+        notifyAddresses: [employer, employee],
+      };
+    }
+    case "cancelled": {
+      const [employer, employee, refund, employee_payout] = data;
+      return {
+        ...base,
+        employer,
+        employee,
+        refund,
+        employee_payout,
+        subject: `PayStream: Stream #${streamId} cancelled`,
+        text: `Stream #${streamId} was cancelled by ${employer}. Refund: ${refund}, Employee Payout: ${employee_payout}.`,
+        notifyAddresses: [employer, employee],
       };
     }
     case "status": {
@@ -134,7 +217,7 @@ async function poll() {
       const notification = buildNotification(event);
       const payload = { ...notification, timestamp: new Date().toISOString() };
 
-      await sendWebhook(payload);
+      await notifyWebhooks(event.type, payload, notification.notifyAddresses || []);
       await sendEmail({
         to: notification.notifyAddresses?.join(","),
         subject: notification.subject,

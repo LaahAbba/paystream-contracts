@@ -35,7 +35,8 @@
     "soroban-client": "^1.0.0",
     "stellar-sdk": "^11.1.0",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.0"
+    "swagger-ui-express": "^5.0.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "eslint": "^8.56.0",

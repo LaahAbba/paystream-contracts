@@ -84,12 +84,25 @@ const router = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 stream_id:
  *                   type: integer
+ *                   example: 101
  *                 transaction_hash:
  *                   type: string
+ *                   example: "a1b2c3d4..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       422:
+ *         description: Idempotency error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
-router.post('/create', [
+router.post('/create', idempotencyMiddleware, [
   body('employer').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid employer address'),
   body('employee').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid employee address'),
   body('token_address').isString().matches(/^C[A-Z0-9]{62}$/).withMessage('Invalid token contract address'),
@@ -175,6 +188,27 @@ router.post('/create', [
  *     responses:
  *       200:
  *         description: Stream information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 stream:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: 'integer', example: 101 }
+ *                     employer: { $ref: '#/components/schemas/Address' }
+ *                     employee: { $ref: '#/components/schemas/Address' }
+ *                     token: { $ref: '#/components/schemas/Address' }
+ *                     deposit: { $ref: '#/components/schemas/Amount' }
+ *                     withdrawn: { $ref: '#/components/schemas/Amount' }
+ *                     rate_per_second: { $ref: '#/components/schemas/Rate' }
+ *                     status: { $ref: '#/components/schemas/StreamStatus' }
+ *       404:
+ *         description: Stream not found
  */
 router.get('/:stream_id', [
   param('stream_id').isInt({ min: 1 }).withMessage('Invalid stream ID'),
@@ -317,6 +351,25 @@ router.get('/:stream_id/claimable', [
  *             properties:
  *               employee:
  *                 $ref: '#/components/schemas/Address'
+ *     responses:
+ *       200:
+ *         description: Withdrawal successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 amount_withdrawn:
+ *                   $ref: '#/components/schemas/Amount'
+ *                   example: "5000000"
+ *                 transaction_hash:
+ *                   type: string
+ *                   example: "b2c3d4e5..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
  */
 router.post('/:stream_id/withdraw', [
   param('stream_id').isInt({ min: 1 }).withMessage('Invalid stream ID'),

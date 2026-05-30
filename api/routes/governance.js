@@ -39,10 +39,17 @@ const router = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 proposal_id:
  *                   type: integer
+ *                   example: 1
  *                 transaction_hash:
  *                   type: string
+ *                   example: "g1h2i3j4..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/propose', [
   body('proposer').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid proposer address'),
@@ -134,8 +141,14 @@ router.post('/propose', [
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "h2i3j4k5..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/vote', [
   body('voter').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid voter address'),

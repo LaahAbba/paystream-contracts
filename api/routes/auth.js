@@ -55,9 +55,11 @@ setInterval(() => {
  *               properties:
  *                 nonce:
  *                   type: string
+ *                   example: "a1b2c3d4..."
  *                 expiresAt:
  *                   type: string
  *                   format: date-time
+ *                   example: "2026-05-29T12:00:00Z"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
  */
@@ -112,12 +114,14 @@ router.post(
  *               properties:
  *                 token:
  *                   type: string
+ *                   example: "eyJhbGci..."
  *                 expiresIn:
  *                   type: string
+ *                   example: "24h"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
  *       401:
- *         description: Invalid signature or expired nonce
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post(
   '/verify',

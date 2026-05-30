@@ -137,6 +137,7 @@ async function closePool() {
 async function deleteOffChainUserData(address) {
   const deletedPrefs = inMemoryPrefs.delete(address);
   const deletedNotifs = inMemoryNotifications.delete(address);
+  const deletedWebhooks = inMemoryWebhooks.delete(address);
   
   let dbDeleted = false;
 
@@ -163,7 +164,7 @@ async function deleteOffChainUserData(address) {
 
   return {
     success: true,
-    deletedFromMemory: deletedPrefs || deletedNotifs,
+    deletedFromMemory: deletedPrefs || deletedNotifs || deletedWebhooks,
     deletedFromDb: dbDeleted,
   };
 }
@@ -173,6 +174,7 @@ module.exports = {
   closePool,
   inMemoryPrefs,
   inMemoryNotifications,
+  inMemoryWebhooks,
   deleteOffChainUserData,
   logAdminAction,
   getAuditLogs,

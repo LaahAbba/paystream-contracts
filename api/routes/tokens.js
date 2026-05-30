@@ -20,8 +20,12 @@ const router = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 total_supply:
  *                   $ref: '#/components/schemas/Amount'
+ *                   example: "1000000000000"
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/total-supply', async (req, res, next) => {
   try {
@@ -64,8 +68,14 @@ router.get('/total-supply', async (req, res, next) => {
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 balance:
  *                   $ref: '#/components/schemas/Amount'
+ *                   example: "5000000"
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/balance/:address', [
   param('address').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid address'),
@@ -137,8 +147,14 @@ router.get('/balance/:address', [
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "g7h8i9j0..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/transfer', [
   body('from').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid from address'),
@@ -217,8 +233,14 @@ router.post('/transfer', [
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 transaction_hash:
  *                   type: string
+ *                   example: "h8i9j0k1..."
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post('/mint', [
   body('admin').isString().matches(/^G[A-Z0-9]{55}$/).withMessage('Invalid admin address'),
