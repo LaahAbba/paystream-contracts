@@ -37,7 +37,7 @@
     "@bull-board/api": "^5.21.3",
     "@bull-board/express": "^5.21.3",
     "soroban-client": "^1.0.0",
-    "stellar-sdk": "^11.1.0",
+    "stellar-sdk": "^13.3.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
     "yaml": "^2.9.0"
