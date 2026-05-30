@@ -16,5 +16,11 @@ services:
       - cargo-cache:/usr/local/cargo/registry
     command: cargo test
 
+  output:
+    build:
+      context: .
+      target: output
+    image: paystream-contracts:output
+
 volumes:
   cargo-cache:
