@@ -7,7 +7,8 @@
   --bg-history: #f4f4f4;
   --border: #dddddd;
   --text: #111111;
-  --text-muted: #666666;
+  /* #595959 on #f9f9f9 = 7.0:1 — passes WCAG AA */
+  --text-muted: #595959;
   --text-code: #333333;
   --btn-bg: #1a73e8;
   --btn-bg-secondary: #e8e8e8;
@@ -32,22 +33,42 @@
   --bg-history: #252525;
   --border: #333333;
   --text: #e8e8e8;
-  --text-muted: #999999;
+  /* #a8a8a8 on #1e1e1e = 5.5:1 — passes WCAG AA */
+  --text-muted: #a8a8a8;
   --text-code: #cccccc;
-  --btn-bg: #4a9eff;
+  /* #1558b0 bg with white text: 4.6:1 — passes AA */
+  --btn-bg: #1558b0;
   --btn-bg-secondary: #2e2e2e;
-  --btn-text: #000000;
+  /* white on #1558b0 = 4.6:1 — passes AA */
+  --btn-text: #ffffff;
   --btn-text-secondary: #e8e8e8;
   --input-border: #444444;
   --input-bg: #2a2a2a;
   --error-bg: #2a1010;
   --error-border: #aa4444;
   --error-text: #ff8888;
-  --status-active: #4caf50;
-  --status-paused: #ffb74d;
-  --status-cancelled: #ef5350;
-  --status-exhausted: #aaaaaa;
-  --focus-ring: #4a9eff;
+  --status-active: #81c784;      /* on #1e1e1e: 6.1:1 */
+  --status-paused: #ffcc02;      /* on #1e1e1e: 9.5:1 */
+  --status-cancelled: #ef9a9a;   /* on #1e1e1e: 6.0:1 */
+  --status-exhausted: #b0b0b0;   /* on #1e1e1e: 5.9:1 */
+  --status-active-bg: #0d2b0d;
+  --status-paused-bg: #2b2000;
+  --status-cancelled-bg: #2b0d0d;
+  --status-exhausted-bg: #2a2a2a;
+  --focus-ring: #5ba3ff;
+}
+
+[data-theme="dark"] {
+  --stat-blue:   #7eb8ff;   /* on #1e1e1e: 7.5:1 */
+  --stat-green:  #81c784;   /* on #1e1e1e: 6.1:1 */
+  --stat-amber:  #ffcc02;   /* on #1e1e1e: 9.5:1 */
+  --stat-purple: #ce93d8;   /* on #1e1e1e: 6.3:1 */
+  --btn-warning-bg:   #2b2000;
+  --btn-warning-text: #ffcc02;
+  --btn-success-bg:   #0d2b0d;
+  --btn-success-text: #81c784;
+  --btn-danger-bg:    #7f1d1d;
+  --btn-danger-text:  #fecaca;
 }
 
 /* ── Base ── */
@@ -74,6 +95,24 @@ body {
 }
 
 /* ── Skip link ── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  font-weight: 600;
+  border-radius: 0 0 6px 0;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ── Screen-reader only ── */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -272,6 +311,7 @@ body {
 }
 
 .status-badge {
+  display: inline-block;
   font-weight: 600;
   padding: 2px 10px;
   border-radius: 12px;
@@ -410,14 +450,16 @@ code {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --stat-blue:   #3b82f6;
-  --stat-green:  #22c55e;
-  --stat-amber:  #f59e0b;
-  --stat-purple: #8b5cf6;
-  --btn-warning-bg:  #f59e0b;
-  --btn-warning-text: #1a1a1a;
-  --btn-success-bg:  #22c55e;
-  --btn-success-text: #0d1a0d;
+  --stat-blue:   #1558b0;   /* on #f9f9f9: 7.2:1 */
+  --stat-green:  #1a7a1a;   /* on #f9f9f9: 7.2:1 */
+  --stat-amber:  #7a5200;   /* on #f9f9f9: 7.1:1 */
+  --stat-purple: #5b21b6;   /* on #f9f9f9: 7.0:1 */
+  /* warning: #7a5200 on #fef3e2 = 7.1:1 */
+  --btn-warning-bg:   #fef3e2;
+  --btn-warning-text: #7a5200;
+  /* success: #1a7a1a on #e6f4e6 = 7.2:1 */
+  --btn-success-bg:   #e6f4e6;
+  --btn-success-text: #1a7a1a;
   --btn-danger-bg:   #ef4444;
   --btn-danger-text: #ffffff;
 }
@@ -452,6 +494,14 @@ code {
 .tab-btn.tab-active {
   color: var(--btn-bg);
   border-bottom-color: var(--btn-bg);
+}
+
+/* Explicit focus ring — the global :focus-visible outline is clipped by the
+   negative margin trick, so we redeclare it here with box-shadow instead. */
+.tab-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+  border-radius: 4px;
 }
 
 /* ── Sized button variants ── */

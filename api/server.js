@@ -13,6 +13,7 @@ const { loadSecrets } = require('./services/secretsService');
 const { closePool } = require('./services/dbService');
 const authMiddleware = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
+const { versionHeader, deprecationWarning } = require('./middleware/versioning');
 const authRoutes = require('./routes/auth');
 const streamRoutes = require('./routes/streams');
 const tokenRoutes = require('./routes/tokens');
@@ -56,6 +57,9 @@ if (process.env.NODE_ENV !== 'test') {
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Version header on all responses
+app.use(versionHeader);
 
 // Swagger configuration
 const swaggerOptions = {
@@ -181,12 +185,19 @@ app.get('/ready', async (req, res) => {
 // Auth routes (public — no authMiddleware)
 app.use('/auth', authRoutes);
 
-// API routes
-app.use('/api/streams', authMiddleware, streamRoutes);
-app.use('/api/tokens', authMiddleware, tokenRoutes);
-app.use('/api/admin', authMiddleware, adminRoutes);
-app.use('/api/governance', authMiddleware, governanceRoutes);
-app.use('/users', authMiddleware, userRoutes);
+// v1 API routes (current)
+app.use('/v1/api/streams', authMiddleware, streamRoutes);
+app.use('/v1/api/tokens', authMiddleware, tokenRoutes);
+app.use('/v1/api/admin', authMiddleware, adminRoutes);
+app.use('/v1/api/governance', authMiddleware, governanceRoutes);
+app.use('/v1/users', authMiddleware, userRoutes);
+
+// Legacy unversioned routes (deprecated)
+app.use('/api/streams', deprecationWarning, authMiddleware, streamRoutes);
+app.use('/api/tokens', deprecationWarning, authMiddleware, tokenRoutes);
+app.use('/api/admin', deprecationWarning, authMiddleware, adminRoutes);
+app.use('/api/governance', deprecationWarning, authMiddleware, governanceRoutes);
+app.use('/users', deprecationWarning, authMiddleware, userRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

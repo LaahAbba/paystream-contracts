@@ -152,6 +152,25 @@ export default function App() {
 
   const duration = estimatedDuration(deposit, rate);
 
+  const VIEWS: AppView[] = ["demo", "dashboard", "employee"];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent, current: AppView) => {
+    const idx = VIEWS.indexOf(current);
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      setView(VIEWS[(idx + 1) % VIEWS.length]);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      setView(VIEWS[(idx - 1 + VIEWS.length) % VIEWS.length]);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setView(VIEWS[0]);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setView(VIEWS[VIEWS.length - 1]);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
@@ -224,7 +243,7 @@ export default function App() {
   }, [employee, token, deposit, rate, stopTime, submitted]);
 
   return (
-    <div className="app-root">
+    <div className="app-root" id="main-content">
       {/* ── Header ── */}
       <header className="app-header" role="banner">
         <h1>💸 PayStream Demo</h1>
@@ -250,6 +269,7 @@ export default function App() {
           aria-controls="panel-demo"
           className={`tab-btn${view === "demo" ? " tab-active" : ""}`}
           onClick={() => setView("demo")}
+          onKeyDown={(e) => handleTabKeyDown(e, "demo")}
         >
           🖥 Stream Demo
         </button>
@@ -260,6 +280,7 @@ export default function App() {
           aria-controls="panel-dashboard"
           className={`tab-btn${view === "dashboard" ? " tab-active" : ""}`}
           onClick={() => setView("dashboard")}
+          onKeyDown={(e) => handleTabKeyDown(e, "dashboard")}
         >
           💼 Employer Dashboard
         </button>
@@ -270,6 +291,7 @@ export default function App() {
           aria-controls="panel-employee"
           className={`tab-btn${view === "employee" ? " tab-active" : ""}`}
           onClick={() => setView("employee")}
+          onKeyDown={(e) => handleTabKeyDown(e, "employee")}
         >
           💳 Employee Earnings
         </button>

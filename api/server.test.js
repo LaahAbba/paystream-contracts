@@ -78,3 +78,32 @@ describe('probe endpoints', () => {
     expect(response.body.checks[0].name).toBe('sorobanRpc');
   });
 });
+
+describe('API versioning (#253)', () => {
+  it('includes X-API-Version header on all responses', async () => {
+    const response = await request(app).get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['x-api-version']).toBe('v1');
+  });
+
+  it('includes deprecation headers on legacy unversioned routes', async () => {
+    const response = await request(app)
+      .get('/api/streams/count')
+      .set('X-API-Key', 'test-key');
+
+    expect(response.headers['x-api-version']).toBe('v1');
+    expect(response.headers['x-api-deprecated']).toBe('true');
+    expect(response.headers['x-api-deprecation-notice']).toContain('Migrate to /v1/');
+  });
+
+  it('does not include deprecation headers on v1 routes', async () => {
+    const response = await request(app)
+      .get('/v1/api/streams/count')
+      .set('X-API-Key', 'test-key');
+
+    expect(response.headers['x-api-version']).toBe('v1');
+    expect(response.headers['x-api-deprecated']).toBeUndefined();
+    expect(response.headers['x-api-deprecation-notice']).toBeUndefined();
+  });
+});
