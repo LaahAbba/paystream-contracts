@@ -1108,3 +1108,209 @@ code {
   border-color: #166534;
   color: #86efac;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ISSUE #234 — Error boundary fallback
+══════════════════════════════════════════════════════════════════════════════ */
+
+.eb-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 10px;
+  margin: 16px 0;
+}
+
+.eb-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.eb-heading {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--error-text);
+}
+
+.eb-message {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 420px;
+  word-break: break-word;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ISSUE #235 — Stream card skeleton loader
+══════════════════════════════════════════════════════════════════════════════ */
+
+@keyframes skel-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.skel-card {
+  pointer-events: none;
+}
+
+.skel-block {
+  background: var(--border);
+  border-radius: 4px;
+  animation: skel-pulse 1.6s ease-in-out infinite;
+}
+
+.skel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-history);
+  border-bottom: 1px solid var(--border);
+}
+
+.skel-title  { width: 90px;  height: 14px; }
+.skel-badge  { width: 56px;  height: 18px; border-radius: 12px; }
+
+.skel-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+@media (min-width: 560px) {
+  .skel-metrics { grid-template-columns: repeat(4, 1fr); }
+}
+
+.skel-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skel-label { width: 60%;  height: 10px; }
+.skel-value { width: 80%;  height: 14px; }
+
+.skel-progress-section {
+  padding: 0 16px 16px;
+}
+
+.skel-bar {
+  height: 8px;
+  width: 100%;
+  border-radius: 99px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ISSUE #236 — Cancel confirmation modal
+══════════════════════════════════════════════════════════════════════════════ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+.modal-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 24px 24px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.modal-warning {
+  margin: 0;
+  font-size: 14px;
+  color: var(--error-text);
+}
+
+.modal-summary {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.modal-summary-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.modal-summary-row dt {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.modal-summary-row dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.modal-earned {
+  color: var(--status-active);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ISSUE #233 — CSV date-range filter inputs
+══════════════════════════════════════════════════════════════════════════════ */
+
+.csv-range-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+
+.csv-range-row label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.csv-range-row input[type="date"] {
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text);
+}

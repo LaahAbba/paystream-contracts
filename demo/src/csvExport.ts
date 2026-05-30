@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Issue #118 – CSV export of stream history.
+ * Issue #118 / #233 – CSV export of stream history with optional date-range
+ * filtering.
  *
  * Converts an array of TxRecord objects into a RFC 4180-compliant CSV string
  * and triggers a browser download. Works for streams with 1000+ events by
@@ -9,7 +10,13 @@
 
 import { TxRecord } from "./useTransactionHistory";
 
-const HEADERS = ["date", "type", "amount", "stream_id"] as const;
+const HEADERS = ["date", "stream_id", "employee", "token", "type", "amount"] as const;
+
+/** Optional date-range filter passed to buildCsv / exportAllHistory. */
+export interface DateRange {
+  from?: Date;
+  to?: Date;
+}
 
 /** Escape a CSV cell value per RFC 4180. */
 function escapeCell(value: string): string {
@@ -21,19 +28,37 @@ function escapeCell(value: string): string {
 
 /**
  * Build a CSV string from transaction records.
- * @param records  Array of TxRecord (may be large — processed row-by-row).
- * @param streamId The stream ID to include in every row.
+ * @param records   Array of TxRecord (may be large — processed row-by-row).
+ * @param streamId  The stream ID to include in every row.
+ * @param employee  Employee address — included as a column on every row.
+ * @param token     Token contract address — included as a column on every row.
+ * @param range     Optional date range to filter records client-side.
  */
-export function buildCsv(records: TxRecord[], streamId: bigint): string {
+export function buildCsv(
+  records: TxRecord[],
+  streamId: bigint,
+  employee: string,
+  token: string,
+  range?: DateRange
+): string {
   const rows: string[] = [HEADERS.join(",")];
   for (const r of records) {
     const date = r.timestamp ? new Date(r.timestamp).toISOString() : "";
+    if (range) {
+      const ts = r.timestamp ? new Date(r.timestamp) : null;
+      if (ts) {
+        if (range.from && ts < range.from) continue;
+        if (range.to && ts > range.to) continue;
+      }
+    }
     rows.push(
       [
         escapeCell(date),
+        escapeCell(streamId.toString()),
+        escapeCell(employee),
+        escapeCell(token),
         escapeCell(r.type),
         escapeCell(r.amount ?? ""),
-        escapeCell(streamId.toString()),
       ].join(",")
     );
   }
@@ -65,10 +90,16 @@ export function downloadCsv(csv: string, filename: string): void {
  * @param streamId  Stream to export.
  * @param fetchPage Function that fetches one page given an optional cursor,
  *                  returning records and the next cursor (null when done).
+ * @param range     Optional date range to filter records before writing CSV.
+ * @param employee  Employee address to embed in every row.
+ * @param token     Token contract address to embed in every row.
  */
 export async function exportAllHistory(
   streamId: bigint,
-  fetchPage: (cursor?: string) => Promise<{ records: TxRecord[]; nextCursor: string | null }>
+  fetchPage: (cursor?: string) => Promise<{ records: TxRecord[]; nextCursor: string | null }>,
+  range?: DateRange,
+  employee = "",
+  token = ""
 ): Promise<void> {
   const all: TxRecord[] = [];
   let cursor: string | undefined;
@@ -79,6 +110,6 @@ export async function exportAllHistory(
     cursor = nextCursor ?? undefined;
   } while (cursor);
 
-  const csv = buildCsv(all, streamId);
+  const csv = buildCsv(all, streamId, employee, token, range);
   downloadCsv(csv, `stream-${streamId}-history.csv`);
 }

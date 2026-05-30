@@ -27,6 +27,18 @@ function isoTs(ts: bigint): string {
   return new Date(Number(ts) * 1000).toISOString();
 }
 
+// ─── Explorer URL helpers ────────────────────────────────────────────────────
+
+const EXPLORER_BASE = "https://stellar.expert/explorer/testnet";
+
+function explorerAccountUrl(address: string): string {
+  return `${EXPLORER_BASE}/account/${address}`;
+}
+
+function explorerTxUrl(hash: string): string {
+  return `${EXPLORER_BASE}/tx/${hash}`;
+}
+
 // ─── ExplorerLink (#239) ──────────────────────────────────────────────────────
 
 interface ExplorerLinkProps {
@@ -179,11 +191,9 @@ export function StreamStatusCard({
   const showCsv      = !!onExportCsv;
   const hasActions   = showWithdraw || showPause || showResume || showCancel || showTopUp || showHistory || showCsv;
 
-  const handleCancel = () => {
-    if (window.confirm(`Cancel stream #${key}? This cannot be undone.`)) {
-      onCancel!();
-    }
-  };
+  // onCancel is called directly; the parent is responsible for showing a
+  // confirmation modal (CancelConfirmModal) before invoking this callback.
+  const handleCancel = () => onCancel!();
 
   return (
     <article

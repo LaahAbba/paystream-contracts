@@ -9,6 +9,7 @@ import { EmployerDashboard } from "./EmployerDashboard";
 import { EmployeeDashboard } from "./EmployeeDashboard";
 import { StreamStatusCard } from "./StreamStatusCard";
 import { BatchCreateStreams } from "./BatchCreateStreams";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 const STROOP = 10_000_000n; // 1 XLM in stroops
 
@@ -125,6 +126,9 @@ export default function App() {
 
   // Transaction history panel
   const [historyStreamId, setHistoryStreamId] = useState<bigint | null>(null);
+  // CSV date-range filter (#233)
+  const [csvFrom, setCsvFrom] = useState("");
+  const [csvTo, setCsvTo] = useState("");
 
   // Stream templates (#117)
   const { templates, save: saveTemplate, remove: removeTemplate } = useStreamTemplates();
@@ -177,30 +181,41 @@ export default function App() {
   };
 
   const handleExportCsv = async (streamId: bigint) => {
-    await exportAllHistory(streamId, async (cursor) => {
-      // Re-use the Horizon fetch logic from useTransactionHistory by calling
-      // the hook's fetchHistory and reading the internal cursor. Since the hook
-      // manages its own state we replicate the fetch inline here for a clean
-      // one-shot export without mutating the panel's displayed records.
-      const PAGE_SIZE = 200; // larger page for export efficiency
-      const params = new URLSearchParams({ limit: String(PAGE_SIZE), order: "desc" });
-      if (cursor) params.set("cursor", cursor);
-      const HORIZON_BASE = "https://horizon-testnet.stellar.org";
-      const res = await fetch(`${HORIZON_BASE}/accounts/${streamId}/operations?${params}`);
-      if (!res.ok) throw new Error(`Horizon error: ${res.status}`);
-      const data = await res.json() as {
-        _embedded: { records: Array<Record<string, unknown>> };
-      };
-      const ops = data._embedded.records;
-      const records = ops.map((op) => ({
-        id: String(op.id),
-        timestamp: String(op.created_at ?? ""),
-        type: String(op.type ?? "").replace(/_/g, " "),
-        amount: typeof op.amount === "string" ? `${op.amount} XLM` : null,
-      }));
-      const lastToken = ops.length > 0 ? String(ops[ops.length - 1].paging_token ?? "") : null;
-      return { records, nextCursor: ops.length === PAGE_SIZE ? lastToken : null };
-    });
+    const stream = streams.find((s) => s.id === streamId);
+    const range =
+      csvFrom || csvTo
+        ? { from: csvFrom ? new Date(csvFrom) : undefined, to: csvTo ? new Date(csvTo) : undefined }
+        : undefined;
+    await exportAllHistory(
+      streamId,
+      async (cursor) => {
+        // Re-use the Horizon fetch logic from useTransactionHistory by calling
+        // the hook's fetchHistory and reading the internal cursor. Since the hook
+        // manages its own state we replicate the fetch inline here for a clean
+        // one-shot export without mutating the panel's displayed records.
+        const PAGE_SIZE = 200; // larger page for export efficiency
+        const params = new URLSearchParams({ limit: String(PAGE_SIZE), order: "desc" });
+        if (cursor) params.set("cursor", cursor);
+        const HORIZON_BASE = "https://horizon-testnet.stellar.org";
+        const res = await fetch(`${HORIZON_BASE}/accounts/${streamId}/operations?${params}`);
+        if (!res.ok) throw new Error(`Horizon error: ${res.status}`);
+        const data = await res.json() as {
+          _embedded: { records: Array<Record<string, unknown>> };
+        };
+        const ops = data._embedded.records;
+        const records = ops.map((op) => ({
+          id: String(op.id),
+          timestamp: String(op.created_at ?? ""),
+          type: String(op.type ?? "").replace(/_/g, " "),
+          amount: typeof op.amount === "string" ? `${op.amount} XLM` : null,
+        }));
+        const lastToken = ops.length > 0 ? String(ops[ops.length - 1].paging_token ?? "") : null;
+        return { records, nextCursor: ops.length === PAGE_SIZE ? lastToken : null };
+      },
+      range,
+      stream?.employee ?? "",
+      stream?.token ?? ""
+    );
   };
 
   // Re-validate on change after first submit attempt
@@ -277,7 +292,9 @@ export default function App() {
         aria-labelledby="tab-batch"
         hidden={view !== "batch"}
       >
-        <BatchCreateStreams walletPublicKey={publicKey} />
+        <ErrorBoundary label="Batch Create">
+          <BatchCreateStreams walletPublicKey={publicKey} />
+        </ErrorBoundary>
       </div>
 
       {/* ── Employer Dashboard panel ── */}
@@ -287,7 +304,9 @@ export default function App() {
         aria-labelledby="tab-dashboard"
         hidden={view !== "dashboard"}
       >
-        <EmployerDashboard walletPublicKey={publicKey} />
+        <ErrorBoundary label="Employer Dashboard">
+          <EmployerDashboard walletPublicKey={publicKey} />
+        </ErrorBoundary>
       </div>
 
       {/* ── Employee Earnings panel ── */}
@@ -297,7 +316,9 @@ export default function App() {
         aria-labelledby="tab-employee"
         hidden={view !== "employee"}
       >
-        <EmployeeDashboard walletPublicKey={publicKey} />
+        <ErrorBoundary label="Employee Earnings">
+          <EmployeeDashboard walletPublicKey={publicKey} />
+        </ErrorBoundary>
       </div>
 
       {/* ── Demo panel ── */}
@@ -307,6 +328,7 @@ export default function App() {
         aria-labelledby="tab-demo"
         hidden={view !== "demo"}
       >
+        <ErrorBoundary label="Stream Demo">
         {/* ── Wallet ── */}
         <section className="card" aria-labelledby="wallet-heading">
           <h2 id="wallet-heading">Wallet</h2>
@@ -525,14 +547,37 @@ export default function App() {
                             </button>
                           )}
                           {history.records.length > 0 && (
-                            <button
-                              onClick={() => handleExportCsv(s.id)}
-                              className="btn btn-secondary"
-                              style={{ marginTop: 8 }}
-                              aria-label={`Export all history for stream ${key} as CSV`}
-                            >
-                              Export all as CSV
-                            </button>
+                            <div style={{ marginTop: 10 }}>
+                              <div className="csv-range-row">
+                                <label>
+                                  From
+                                  <input
+                                    type="date"
+                                    value={csvFrom}
+                                    onChange={(e) => setCsvFrom(e.target.value)}
+                                    max={csvTo || undefined}
+                                    aria-label="Export date range start"
+                                  />
+                                </label>
+                                <label>
+                                  To
+                                  <input
+                                    type="date"
+                                    value={csvTo}
+                                    onChange={(e) => setCsvTo(e.target.value)}
+                                    min={csvFrom || undefined}
+                                    aria-label="Export date range end"
+                                  />
+                                </label>
+                              </div>
+                              <button
+                                onClick={() => handleExportCsv(s.id)}
+                                className="btn btn-secondary"
+                                aria-label={`Export all history for stream ${key} as CSV`}
+                              >
+                                ⬇ Export as CSV
+                              </button>
+                            </div>
                           )}
                         </div>
                       )}
@@ -543,6 +588,7 @@ export default function App() {
             </ul>
           </section>
         )}
+        </ErrorBoundary>
       </main>
     </div>
   );

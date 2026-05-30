@@ -2,6 +2,8 @@
 import React from "react";
 import { useEmployerDashboard } from "./useEmployerDashboard";
 import { StreamStatusCard } from "./StreamStatusCard";
+import { CancelConfirmModal } from "./CancelConfirmModal";
+import { StreamCardSkeleton } from "./StreamCardSkeleton";
 import type { Stream } from "@paystream/sdk";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -65,6 +67,7 @@ export function EmployerDashboard({ walletPublicKey }: EmployerDashboardProps) {
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [topUpStreamId, setTopUpStreamId] = React.useState<bigint | null>(null);
   const [topUpAmount, setTopUpAmount] = React.useState<string>("");
+  const [cancelStream, setCancelStream] = React.useState<Stream | null>(null);
 
   const filtered =
     statusFilter === "all"
@@ -200,6 +203,15 @@ export function EmployerDashboard({ walletPublicKey }: EmployerDashboardProps) {
         </div>
       )}
 
+      {/* ── Loading skeletons (initial load and refetch) ── */}
+      {loading && streams.length === 0 && (
+        <div className="db-stream-list" aria-busy="true" aria-label="Loading streams">
+          <StreamCardSkeleton />
+          <StreamCardSkeleton />
+          <StreamCardSkeleton />
+        </div>
+      )}
+
       {/* ── Empty state ── */}
       {!loading && streams.length === 0 && (
         <div className="db-empty card" role="status">
@@ -268,7 +280,7 @@ export function EmployerDashboard({ walletPublicKey }: EmployerDashboardProps) {
                 actionLoading={streamActionLoading}
                 onPause={() => handleAction("pause", s.id)}
                 onResume={() => handleAction("resume", s.id)}
-                onCancel={() => handleAction("cancel", s.id)}
+                onCancel={() => setCancelStream(s)}
                 onShowTopUp={() => {
                   setTopUpStreamId(isToppingUp ? null : s.id);
                   setTopUpAmount("");
@@ -329,6 +341,22 @@ export function EmployerDashboard({ walletPublicKey }: EmployerDashboardProps) {
             );
           })}
         </div>
+      )}
+
+      {/* ── Cancel confirmation modal (#236) ── */}
+      {cancelStream && (
+        <CancelConfirmModal
+          streamId={cancelStream.id.toString()}
+          earnedStroops={(cancelStream.deposit > cancelStream.withdrawn
+            ? cancelStream.deposit - cancelStream.withdrawn
+            : 0n) as bigint}
+          refundStroops={cancelStream.withdrawn}
+          onConfirm={() => {
+            handleAction("cancel", cancelStream.id);
+            setCancelStream(null);
+          }}
+          onClose={() => setCancelStream(null)}
+        />
       )}
     </div>
   );
