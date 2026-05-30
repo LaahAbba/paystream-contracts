@@ -33,7 +33,7 @@
     "nodemailer": "^8.0.10",
     "pg": "^8.21.0",
     "bullmq": "^5.8.0",
-    "ioredis": "^5.4.1",
+    "ioredis": "^5.11.0",
     "@bull-board/api": "^5.21.3",
     "@bull-board/express": "^5.21.3",
     "soroban-client": "^1.0.0",
