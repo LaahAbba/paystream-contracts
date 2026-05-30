@@ -112,8 +112,41 @@ async function sendEmail({ to, subject, text }) {
     await mailer.sendMail({ from: EMAIL_FROM, to, subject, text });
   } catch (err) {
     console.error("Email delivery failed:", err.message);
+    throw err; // Throw to trigger BullMQ retry
   }
 }
+
+/** Worker for processing notification jobs */
+const worker = new Worker(
+  "notifications",
+  async (job) => {
+    const { payload, notification } = job.data;
+    console.log(`[Job ${job.id}] Processing notification for stream #${notification.streamId}`);
+
+    // Try sending webhook
+    if (WEBHOOK_URL) {
+      await sendWebhook(payload);
+    }
+
+    // Try sending email
+    if (mailer && notification.notifyAddresses?.length > 0) {
+      await sendEmail({
+        to: notification.notifyAddresses.join(","),
+        subject: notification.subject,
+        text: notification.text,
+      });
+    }
+  },
+  { connection }
+);
+
+worker.on("completed", (job) => {
+  console.log(`[Job ${job.id}] Completed successfully`);
+});
+
+worker.on("failed", (job, err) => {
+  console.error(`[Job ${job.id}] Failed: ${err.message}`);
+});
 
 /** Derive notification recipients and message from a parsed event. */
 function buildNotification(event) {

@@ -9,6 +9,8 @@ require("dotenv").config();
 const http = require("http");
 const { SorobanRpc, xdr } = require("@stellar/stellar-sdk");
 const { Pool } = require("pg");
+const { Worker } = require("bullmq");
+const { indexerQueue, connection } = require("./queue");
 
 const {
   SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org",
@@ -23,6 +25,40 @@ if (!DATABASE_URL)        { console.error("DATABASE_URL is required");        pr
 
 const rpc  = new SorobanRpc.Server(SOROBAN_RPC_URL);
 const pool = new Pool({ connectionString: DATABASE_URL });
+
+// ---------------------------------------------------------------------------
+// Worker for processing indexing jobs
+// ---------------------------------------------------------------------------
+
+const worker = new Worker(
+  "indexer",
+  async (job) => {
+    const { ledger, txHash, eventType, streamId, topics, data } = job.data;
+    console.log(`[Job ${job.id}] Indexing event ${eventType} for stream #${streamId}`);
+
+    try {
+      await pool.query(
+        `INSERT INTO stream_events
+           (ledger_sequence, tx_hash, event_type, stream_id, raw_topics, raw_data)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (tx_hash, event_type, stream_id) DO NOTHING`,
+        [ledger, txHash, eventType, streamId, JSON.stringify(topics), JSON.stringify(data)]
+      );
+    } catch (err) {
+      console.error("DB insert error:", err.message);
+      throw err; // Trigger retry
+    }
+  },
+  { connection }
+);
+
+worker.on("completed", (job) => {
+  console.log(`[Job ${job.id}] Event indexed successfully`);
+});
+
+worker.on("failed", (job, err) => {
+  console.error(`[Job ${job.id}] Failed: ${err.message}`);
+});
 
 // ---------------------------------------------------------------------------
 // XDR decoding helpers
@@ -103,17 +139,10 @@ async function indexEvents() {
     const txHash = raw.txHash || raw.transaction_hash || "";
     const { eventType, streamId, topics, data } = parseEvent(raw);
 
-    try {
-      await pool.query(
-        `INSERT INTO stream_events
-           (ledger_sequence, tx_hash, event_type, stream_id, raw_topics, raw_data)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (tx_hash, event_type, stream_id) DO NOTHING`,
-        [ledger, txHash, eventType, streamId, JSON.stringify(topics), JSON.stringify(data)]
-      );
-    } catch (err) {
-      console.error("DB insert error:", err.message);
-    }
+    await indexerQueue.add(
+      `index-${txHash}-${eventType}-${streamId}`,
+      { ledger, txHash, eventType, streamId, topics, data }
+    );
 
     if (ledger > maxLedger) maxLedger = ledger;
   }
